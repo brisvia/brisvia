@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Bitcoin Core Security Policy
-    url: https://github.com/bitcoin/bitcoin/blob/master/SECURITY.md
-    about: View security policy
-  - name: Bitcoin Core Developers
-    url: https://bitcoincore.org
-    about: Bitcoin Core homepage
+  - name: Brisvia Security Policy
+    url: https://github.com/brisvia/brisvia/blob/main/SECURITY.md
+    about: How to report a security vulnerability privately
+  - name: Brisvia Website
+    url: https://brisvia.com
+    about: Project homepage, downloads and documentation

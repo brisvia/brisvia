@@ -2,19 +2,33 @@
 
 ## Supported Versions
 
-See our website for versions of Bitcoin Core that are currently supported with
-security updates: https://bitcoincore.org/en/lifecycle/#schedule
+Brisvia Core is under active development. Security fixes are applied to the
+latest release published at https://github.com/brisvia/brisvia/releases and
+announced on https://brisvia.com.
 
 ## Reporting a Vulnerability
 
-To report security issues send an email to security@bitcoincore.org (not for support).
+Please report security vulnerabilities **privately**. Do not open a public
+issue for a security problem.
 
-The following keys may be used to communicate sensitive information to developers:
+The preferred channel is GitHub's private vulnerability reporting for this
+repository: open the **Security** tab at
+https://github.com/brisvia/brisvia/security and use **Report a vulnerability**.
+This keeps the report confidential until a fix is available.
 
-| Name | Fingerprint |
-|------|-------------|
-| Pieter Wuille | 133E AC17 9436 F14A 5CF1  B794 860F EB80 4E66 9320 |
-| Michael Ford | E777 299F C265 DD04 7930  70EB 944D 35F9 AC3D B76A |
-| Ava Chow | 1528 1230 0785 C964 44D3  334D 1756 5732 E08E 5E41 |
+When reporting, please include:
 
-You can import a key by running the following command with that individual’s fingerprint: `gpg --keyserver hkps://keys.openpgp.org --recv-keys "<fingerprint>"` Ensure that you put quotes around fingerprints containing spaces.
+- a description of the vulnerability and its potential impact,
+- steps to reproduce (a proof of concept if possible),
+- the affected version or commit,
+- any suggested mitigation.
+
+We aim to acknowledge valid reports and to coordinate a fix and a disclosure
+timeline with the reporter.
+
+## Note on the upstream base
+
+Brisvia Core is a fork of [Bitcoin Core](https://github.com/bitcoin/bitcoin)
+v30.2. A vulnerability that also affects upstream Bitcoin Core should, in
+addition, be reported to the Bitcoin Core project through its own security
+policy so the wider ecosystem can be protected.
