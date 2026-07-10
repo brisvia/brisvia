@@ -1,0 +1,102 @@
+name: Brisvia CI
+
+# Minimal, conservative CI for the Brisvia core (Bitcoin Core v30.2 fork + RandomX).
+# Goal: give an auditor confidence that the tree builds and that Brisvia's own unit
+# tests pass, without going red on heavy or flaky suites inherited from upstream.
+# It builds only the RandomX static library plus the test_bitcoin binary, and runs
+# just the two Brisvia unit-test suites. Functional tests and the rest of the
+# upstream suite are intentionally excluded.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux — build RandomX + core, run Brisvia unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+
+    steps:
+      - name: Check out repository (with RandomX submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Dependencies taken straight from doc/build-unix.md:
+      #   build tools  : build-essential cmake pkgconf python3
+      #   libevent+boost: libevent-dev libboost-dev
+      #   wallet (sqlite, enabled by default): libsqlite3-dev
+      # ccache is added to speed up repeated builds.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            pkgconf \
+            python3 \
+            ccache \
+            libevent-dev \
+            libboost-dev \
+            libsqlite3-dev
+
+      # Cache the ccache directory so follow-up runs are fast. A fresh key is
+      # written every commit; restore-keys falls back to the latest prior cache.
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      # Step 1 from the README: build the RandomX static library (once).
+      # Build and tests run on the same runner, so -DARCH=native is safe.
+      - name: Build RandomX static library
+        run: |
+          cmake -S src/randomx -B src/randomx/build -DARCH=native
+          cmake --build src/randomx/build -j"$(nproc)"
+
+      # Step 2: configure Brisvia Core. RandomX paths default to the submodule
+      # build, so no extra flags are needed. GUI/bench/fuzz are already off by
+      # default; we set them explicitly to keep the build minimal and predictable.
+      # WITH_CCACHE is on by default and picks up the ccache installed above.
+      - name: Configure Brisvia Core (tests only, no GUI/bench/fuzz)
+        run: |
+          cmake -B build \
+            -DBUILD_TESTS=ON \
+            -DBUILD_GUI=OFF \
+            -DBUILD_BENCH=OFF \
+            -DBUILD_FUZZ_BINARY=OFF
+
+      # Build only the unit-test binary and its dependencies — not bitcoind,
+      # bitcoin-cli, etc. This is the minimum needed to run the tests.
+      - name: Build the unit-test binary (test_bitcoin)
+        run: cmake --build build --target test_bitcoin -j"$(nproc)"
+
+      # Run ONLY Brisvia's own two suites. The test names are registered by
+      # src/test/CMakeLists.txt exactly as the Boost.Test suite names.
+      - name: Run Brisvia unit tests
+        run: |
+          ctest --test-dir build --output-on-failure \
+            -R '^(brisvia_randomx_tests|brisvia_headerssync_tests)$'
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache -s
