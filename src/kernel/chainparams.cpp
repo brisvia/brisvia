@@ -890,9 +890,9 @@ public:
         assert(consensus.hashGenesisBlock == uint256{"7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff"});
         assert(genesis.hashMerkleRoot == uint256{"c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d"});
 
-        // Isolated rehearsal: no fixed seeds or DNS seed (generated/published before the public launch on Aug 1).
-        vFixedSeeds.clear();
-        vSeeds.clear();
+        // Fixed seed nodes so a fresh node can discover the network without a manual -addnode.
+        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_brisvia_main), std::end(chainparams_seed_brisvia_main));
+        vSeeds.clear();  // no DNS seed yet; the fixed seeds above bootstrap the network
 
         // mainnet's own base58 prefixes (different from testnet 111/196/239). Primary format is bech32 "brv".
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,25);

@@ -1,0 +1,2 @@
+# Fixed seed nodes for the Brisvia test network (BRISVIA_TESTNET, port 19333).
+187.77.240.145:19333
