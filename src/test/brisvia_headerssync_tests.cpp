@@ -1,7 +1,7 @@
-// Brisvia: functional test of the RandomX integration in HeadersSyncState.
-// In presync and redownload, no header adds work nor is released without a VALID RandomX.
-// The RandomX work is processed in bounded QUANTA (budget), draining the rest of the message with
-// ContinuePendingHeaders(), and the "end of message" logic runs ONLY when the last header is consumed.
+// Brisvia - Phase 3A-4 + 3A-5: functional test of the RandomX integration in HeadersSyncState.
+// F3A-4: in presync and redownload, no header adds work nor is released without RandomX VALID.
+// F3A-5: the RandomX work is processed in bounded QUANTA (budget), draining the rest of the message with
+// ContinuePendingHeaders(), and the "end of message" logic runs ONLY when consuming the last header.
 // Uses the Brisvia regtest (-brisviapow) and mines real RandomX headers; it stays below height 64
 // (fixed initial seed -> a single light VM, fast mining).
 #include <arith_uint256.h>
@@ -56,7 +56,7 @@ struct BrisviaHeadersSyncSetup : public TestingSetup {
         }
     }
 
-    // Simulates net_processing's scheduling: delivers the batch and drains all pending quanta with
+    // Simulates the net_processing scheduling (F3B): delivers the batch and drains all pending quanta with
     // ContinuePendingHeaders(), accumulating the released headers. Verifies the invariant more_internal_work =>
     // !request_more (nothing is requested from the peer while local work remains).
     HeadersSyncState::ProcessingResult DrainProcess(HeadersSyncState& hss,
@@ -78,8 +78,8 @@ struct BrisviaHeadersSyncSetup : public TestingSetup {
 
 BOOST_FIXTURE_TEST_SUITE(brisvia_headerssync_tests, BrisviaHeadersSyncSetup)
 
-// Valid chain syncs (presync -> redownload -> final with all headers); an invalid RandomX aborts and does not
-// credit. It is drained in quanta.
+// F3A-4: valid chain syncs (presync -> redownload -> final with all headers); invalid RandomX aborts
+// and credits nothing. It is drained in quanta (F3A-5).
 BOOST_AUTO_TEST_CASE(brisvia_headers_sync_randomx)
 {
     const CBlockHeader genesis = Params().GenesisBlock();
@@ -93,7 +93,7 @@ BOOST_AUTO_TEST_CASE(brisvia_headers_sync_randomx)
     std::vector<CBlockHeader> chain;
     GenerateBrisviaHeaders(chain, 40, genhash, 0, genesis.nTime, genesis.nBits, ArithToUint256(7));
 
-    // (1) Valid chain: presync reaches the work -> REDOWNLOAD; redownload -> FINAL with ALL the headers.
+    // (1) Valid chain: presync reaches the work -> REDOWNLOAD; redownload -> FINAL with ALL headers.
     {
         std::unique_ptr<HeadersSyncState> hss(new HeadersSyncState(0, Params().GetConsensus(), chain_start, min_work));
         auto result = DrainProcess(*hss, chain, true);
@@ -118,8 +118,8 @@ BOOST_AUTO_TEST_CASE(brisvia_headers_sync_randomx)
     }
 }
 
-// Budget per quanta. The batch is cut at the per-call maximum; the rest is drained with
-// ContinuePendingHeaders(); while local work remains, nothing is requested from the peer.
+// F3A-5: per-quantum budget. The batch is cut at the max per call; the rest is drained with
+// ContinuePendingHeaders(); while local work remains NOTHING is requested from the peer.
 BOOST_AUTO_TEST_CASE(brisvia_headers_sync_quantum)
 {
     const CBlockHeader genesis = Params().GenesisBlock();
@@ -130,14 +130,14 @@ BOOST_AUTO_TEST_CASE(brisvia_headers_sync_quantum)
     std::vector<CBlockHeader> chain; // 40 headers > quantum (32)
     GenerateBrisviaHeaders(chain, 40, genhash, 0, genesis.nTime, genesis.nBits, ArithToUint256(9));
 
-    // (A) Quantum cut: the first call processes one quantum (<40), leaves pending, more_internal_work, does NOT
+    // (A) Quantum cut: first call processes one quantum (<40), leaves it pending, more_internal_work, does NOT
     // request from the peer, stays PRESYNC. High minimum work so it does not transition.
     {
         const arith_uint256 min_work_high = GetBlockProof(*chain_start) * 100000;
         std::unique_ptr<HeadersSyncState> hss(new HeadersSyncState(0, Params().GetConsensus(), chain_start, min_work_high));
         auto r = hss->ProcessNextHeaders(chain, true);
         BOOST_CHECK(r.success);
-        BOOST_CHECK(r.more_internal_work);      // it was cut: headers of the same message remain
+        BOOST_CHECK(r.more_internal_work);      // it was cut: headers from the same message remain
         BOOST_CHECK(!r.request_more);           // nothing is requested from the peer while there is local work
         BOOST_CHECK(hss->HasPendingHeaders());
         BOOST_CHECK(hss->GetState() == HeadersSyncState::State::PRESYNC);
@@ -146,27 +146,27 @@ BOOST_AUTO_TEST_CASE(brisvia_headers_sync_quantum)
         BOOST_CHECK(r.success);
         BOOST_CHECK(!r.more_internal_work);
         BOOST_CHECK(!hss->HasPendingHeaders());
-        BOOST_CHECK(r.request_more);            // full message + insufficient work -> keeps requesting
+        BOOST_CHECK(r.request_more);            // message full + insufficient work -> keeps requesting
         BOOST_CHECK(hss->GetState() == HeadersSyncState::State::PRESYNC);
     }
 
-    // (B) CRITICAL POINT: the threshold is reached mid-message, but the transition to REDOWNLOAD happens ONLY
-    // when the last header is consumed (not mid-message).
+    // (B) CRITICAL POINT: the threshold is reached mid-message, but the transition to REDOWNLOAD happens ONLY when
+    // consuming the last header (not mid-way).
     {
         const arith_uint256 min_work_low = GetBlockProof(*chain_start) * 5; // reached in ~5 headers
         std::unique_ptr<HeadersSyncState> hss(new HeadersSyncState(0, Params().GetConsensus(), chain_start, min_work_low));
         auto r = hss->ProcessNextHeaders(chain, true);
         BOOST_CHECK(r.success);
         BOOST_CHECK(r.more_internal_work);
-        BOOST_CHECK(hss->GetState() == HeadersSyncState::State::PRESYNC); // has NOT transitioned yet
+        BOOST_CHECK(hss->GetState() == HeadersSyncState::State::PRESYNC); // did NOT transition yet
         r = hss->ContinuePendingHeaders();
         BOOST_CHECK(r.success);
         BOOST_CHECK(!r.more_internal_work);
-        BOOST_CHECK(hss->GetState() == HeadersSyncState::State::REDOWNLOAD); // only when the message is exhausted
+        BOOST_CHECK(hss->GetState() == HeadersSyncState::State::REDOWNLOAD); // only upon exhausting the message
         BOOST_CHECK(r.request_more);
     }
 
-    // (C) Invalid RandomX in a header AFTER the first quantum -> aborts at that header, does not credit, cleans up.
+    // (C) Invalid RandomX in a header AFTER the first quantum -> aborts at that header, credits nothing, cleans up.
     {
         std::vector<CBlockHeader> tampered = chain;
         BreakRandomX(tampered[34]); // height 35 (index 34), after the first quantum of 32

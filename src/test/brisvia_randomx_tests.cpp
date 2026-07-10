@@ -1,7 +1,7 @@
-// Brisvia — integration test of the RandomX engine inside the Bitcoin Core tree.
-// Validates the wrapper against the OFFICIAL RandomX vector (tevador). Using the wrapper forces the effective
-// link of librandomx.a into test_bitcoin (no longer dead code) and confirms the engine produces
-// the correct hash inside the node binary. Base of the project's own vectors from Commit 9.
+// Brisvia - integration test of the RandomX engine inside the Bitcoin Core tree.
+// Validates the wrapper against the OFFICIAL RandomX vector (tevador). Using the wrapper forces the
+// effective link of librandomx.a into test_bitcoin (no longer dead code) and confirms the engine produces
+// the correct hash inside the node binary. Basis for the project's own vectors in Commit 9.
 #include <crypto/randomx_hash.h>
 
 #include <arith_uint256.h>
@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE(official_vector)
     BOOST_CHECK_EQUAL(got, "639183aae1bf4c9a35884cb46b09cad9175f04efd7684e7262a0ac1c2f0b4e3f");
 }
 
-// SerializeHeaderForRandomX must produce 80 bytes IDENTICAL to Bitcoin's standard network serialization,
+// SerializeHeaderForRandomX must yield 80 bytes IDENTICAL to Bitcoin's standard network serialization,
 // with the nonce at offset 76 (little-endian). Hardens the canonical input to RandomX (audit R5).
 BOOST_AUTO_TEST_CASE(header_serialization_matches_canonical)
 {
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(header_serialization_matches_canonical)
     const auto rx_in = SerializeHeaderForRandomX(header);
     BOOST_REQUIRE_EQUAL(rx_in.size(), 80u);
 
-    // Byte-for-byte equal to the tree's canonical serialization.
+    // Byte-for-byte identical to the tree's canonical serialization.
     DataStream ss;
     ss << header;
     BOOST_REQUIRE_EQUAL(ss.size(), 80u);
@@ -84,7 +84,7 @@ BOOST_AUTO_TEST_CASE(header_serialization_matches_canonical)
     BOOST_CHECK_EQUAL(rx_in[79], 0x04);
 }
 
-// RandomXOutputToTargetInteger interprets the 32 bytes in little-endian (rx[0] = least significant byte).
+// RandomXOutputToTargetInteger interprets the 32 bytes as little-endian (rx[0] = least significant byte).
 BOOST_AUTO_TEST_CASE(randomx_output_endianness)
 {
     unsigned char rx_one[32] = {0};
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(randomx_output_endianness)
     BOOST_CHECK(std::memcmp(h.begin(), rx_seq, 32) == 0);
 }
 
-// BrisviaGetSeedHash: seed by height over a synthetic chain. Covers the fixed initial range,
+// BrisviaGetSeedHash: seed by height over a synthetic chain. Covers the fixed initial stretch,
 // height 64 (first use of a block hash) and the first rotation at 2112 (64 + 2048).
 BOOST_AUTO_TEST_CASE(seed_hash_by_height)
 {
@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(seed_hash_by_height)
         idx[i].phashBlock = &hashes[i];
     }
 
-    // Initial range 0..63: always the fixed launch seed (does not depend on the chain).
+    // Initial stretch 0..63: always the fixed launch seed (does not depend on the chain).
     BOOST_CHECK(BrisviaGetSeedHash(nullptr, 0, params) == params.brisviaInitialSeed);
     BOOST_CHECK(BrisviaGetSeedHash(&idx[62], 63, params) == params.brisviaInitialSeed);
 
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(seed_hash_by_height)
     BOOST_CHECK(BrisviaGetSeedHash(&idx[2111], 2112, params) == hashes[2048]);
 }
 
-// "On schedule" times for the test chains: t0 and one block every 120 s. With the ASERT anchor at
+// "On-schedule" times for the test chains: t0 and one block every 120 s. With the ASERT anchor at
 // nPrevBlockTime = kChainT0 - 120, this keeps the expected target constant == anchor.
 static constexpr int64_t kChainT0 = 1700000000;
 static constexpr int64_t kChainSpacing = 120;
@@ -140,7 +140,7 @@ static constexpr int64_t kChainSpacing = 120;
 // Builds a synthetic chain idx[0..N-1] with distinct hashes, linked parents and on-schedule times.
 static void BuildChain(int N, std::vector<uint256>& hashes, std::vector<CBlockIndex>& idx)
 {
-    hashes = std::vector<uint256>(N);      // in-place construction (no CBlockIndex copy required)
+    hashes = std::vector<uint256>(N);      // in-place construction (no copy of CBlockIndex required)
     idx = std::vector<CBlockIndex>(N);
     for (int i = 0; i < N; ++i) {
         hashes[i] = ArithToUint256(arith_uint256(1000 + i));
@@ -151,7 +151,7 @@ static void BuildChain(int N, std::vector<uint256>& hashes, std::vector<CBlockIn
     }
 }
 
-// Configures params for active RandomX PoW with an "on schedule" ASERT anchor and an easy target (to mine fast).
+// Configures params for active RandomX PoW with an "on-schedule" ASERT anchor and easy target (to mine fast).
 static void SetupRandomXParams(Consensus::Params& params, uint32_t initialSeedWord, uint32_t easyBits)
 {
     params.fPowRandomX = true;
@@ -163,7 +163,7 @@ static void SetupRandomXParams(Consensus::Params& params, uint32_t initialSeedWo
     params.asertAnchorParams = Consensus::Params::ASERTAnchor{0, easyBits, kChainT0 - kChainSpacing};
 }
 
-// Contextual end-to-end PoW verification with active RandomX + ASERT anchor (hardened gate).
+// Contextual end-to-end PoW verification with RandomX active + ASERT anchor (hardened gate).
 // On schedule, the expected nBits == anchor (easyBits), so the valid header passes the gate and mines fast.
 BOOST_AUTO_TEST_CASE(contextual_pow_end_to_end)
 {
@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_CASE(contextual_pow_end_to_end)
     header.nTime = static_cast<uint32_t>(kChainT0 + 10 * kChainSpacing);
     header.nBits = easyBits; // == nBits expected by ASERT on schedule
 
-    // Find a VALID nonce and an INVALID one (both with nBits==expected -> both go through RandomX and exercise the
+    // Find one VALID and one INVALID nonce (both with nBits==expected -> both reach RandomX and exercise the
     // two branches of hash<=target). With target ~2^255, ~50% falls on each side.
     uint256 powHashValid; uint32_t validNonce = 0;
     bool foundValid = false, foundInvalid = false;
@@ -193,29 +193,29 @@ BOOST_AUTO_TEST_CASE(contextual_pow_end_to_end)
     BOOST_REQUIRE(foundValid);
     BOOST_REQUIRE(foundInvalid);
 
-    // The validator's pow_hash (valid case) == the isolated engine's hash (same seed + same 80 bytes).
+    // The validator's pow_hash (valid case) == the standalone engine's hash (same seed + same 80 bytes).
     header.nNonce = validNonce;
     const auto in = SerializeHeaderForRandomX(header);
     unsigned char rx_ref[BRISVIA_RANDOMX_HASH_SIZE];
     BOOST_REQUIRE(brisvia_randomx_hash(params.brisviaInitialSeed.begin(), 32, in.data(), in.size(), rx_ref));
     BOOST_CHECK(powHashValid == RandomXOutputToUint256(rx_ref));
 
-    // nBits != the one expected by ASERT -> INVALID by the gate (before RandomX).
+    // nBits != the one expected by ASERT -> INVALID at the gate (before RandomX).
     header.nNonce = validNonce;
-    header.nBits = 0x1e0fffff; // valid in range but != expected easyBits
+    header.nBits = 0x1e0fffff; // valid in range but != the expected easyBits
     BOOST_CHECK(CheckRandomXProofOfWorkContextual(header, &idx[9], 10, params, nullptr) == PoWCheckResult::INVALID);
 
     // Inconsistent context (parent at the wrong height) -> INTERNAL_ERROR.
     header.nBits = easyBits;
     BOOST_CHECK(CheckRandomXProofOfWorkContextual(header, &idx[9], 50, params, nullptr) == PoWCheckResult::INTERNAL_ERROR);
 
-    // Bad config (without fPowRandomX) -> INTERNAL_ERROR, not reduced validation.
+    // Bad config (no fPowRandomX) -> INTERNAL_ERROR, not a reduced validation.
     Consensus::Params bad = params;
     bad.fPowRandomX = false;
     BOOST_CHECK(CheckRandomXProofOfWorkContextual(header, &idx[9], 10, bad, nullptr) == PoWCheckResult::INTERNAL_ERROR);
 }
 
-// Single-flight: 20 threads request the SAME seed at once -> only one VM is built.
+// Single-flight: 20 threads request the SAME seed at once -> a single VM is built.
 BOOST_AUTO_TEST_CASE(contextual_pow_single_flight)
 {
     const uint32_t easyBits = 0x207fffff;
@@ -244,7 +244,7 @@ BOOST_AUTO_TEST_CASE(contextual_pow_single_flight)
     BOOST_CHECK_EQUAL(BrisviaRandomXBuildCount() - before, 1u);
 }
 
-// End-to-end ASERT: validates the HOOKUP (GetNextWorkRequired -> ASERT) with fPowRandomX + a synthetic anchor.
+// ASERT end-to-end: validates the HOOKUP (GetNextWorkRequired -> ASERT) with fPowRandomX + synthetic anchor.
 // The CalculateASERT formula is already validated (8160 vectors); here we test that the flow uses it correctly.
 BOOST_AUTO_TEST_CASE(asert_hookup_end_to_end)
 {
@@ -273,7 +273,7 @@ BOOST_AUTO_TEST_CASE(asert_hookup_end_to_end)
         }
     };
 
-    CBlockHeader dummy; // pblock->GetBlockTime() is only used in the min-difficulty exception (off)
+    CBlockHeader dummy; // pblock->GetBlockTime() is only used in the min-difficulty exception (disabled)
     dummy.nTime = static_cast<uint32_t>(t0);
 
     // 1) ON SCHEDULE (exactly 120 s): constant target == anchor, and the hookup == direct ASERT.
@@ -296,7 +296,7 @@ BOOST_AUTO_TEST_CASE(asert_hookup_end_to_end)
         BOOST_CHECK(tgt < anchorTarget);
     }
 
-    // 3) SLOW (240 s per block): difficulty falls (target rises), without exceeding powLimit.
+    // 3) SLOW (240 s per block): difficulty drops (target rises), without exceeding powLimit.
     {
         std::vector<uint256> h; std::vector<CBlockIndex> idx;
         makeChain(h, idx, 20, [&](int i){ return t0 + int64_t(i) * 240; });
@@ -306,8 +306,8 @@ BOOST_AUTO_TEST_CASE(asert_hookup_end_to_end)
     }
 }
 
-// Phase 1 (core layer): checkRandomX=false validates nBits WITHOUT running RandomX; the lower helper validates against
-// an already-resolved context (expectedBits + seedHash).
+// Phase 1 (core layer): checkRandomX=false validates nBits WITHOUT running RandomX; the lower helper validates
+// against an already-resolved context (expectedBits + seedHash).
 BOOST_AUTO_TEST_CASE(contextual_header_work_layers)
 {
     const uint32_t easyBits = 0x207fffff;
@@ -354,8 +354,8 @@ BOOST_AUTO_TEST_CASE(contextual_header_work_layers)
     BOOST_CHECK(CheckRandomXHeaderWithResolvedContext(header, 0x1e0fffff, params.brisviaInitialSeed, params, nullptr) == PoWCheckResult::INVALID);
 }
 
-// Phase 3A-1: PURE verification layer for ONE header over a branch with an ALREADY-indexed parent. Checks that the
-// failure CAUSE is distinguished (parent / difficulty / mining / local error), a typed base for the future P2P.
+// Phase 3A-1: PURE verification layer for ONE header over a branch with an ALREADY-indexed parent. Checks that
+// the failure CAUSE is distinguished (parent / difficulty / mining / local error), a typed basis for future P2P.
 BOOST_AUTO_TEST_CASE(header_from_indexed_parent_statuses)
 {
     const uint32_t easyBits = 0x207fffff; // target ~2^255 (mines fast)
@@ -373,8 +373,8 @@ BOOST_AUTO_TEST_CASE(header_from_indexed_parent_statuses)
     header.nTime = static_cast<uint32_t>(kChainT0 + 10 * kChainSpacing);
     header.nBits = easyBits;            // == expected by ASERT on schedule
 
-    // Find a nonce whose RandomX MEETS (VALID) and another whose RandomX does NOT meet (BAD_RANDOMX_POW). With target
-    // ~2^255, ~50% falls on each side. Both have nBits==expected, so both reach the RandomX stage.
+    // Find one nonce whose RandomX MEETS the target (VALID) and another whose RandomX does NOT (BAD_RANDOMX_POW).
+    // With target ~2^255 ~50% falls on each side. Both have nBits==expected, so both reach the RandomX stage.
     uint256 powHashValid; uint32_t validNonce = 0, invalidNonce = 0;
     bool foundValid = false, foundInvalid = false;
     for (uint32_t nonce = 0; nonce < 512 && !(foundValid && foundInvalid); ++nonce) {
@@ -387,14 +387,14 @@ BOOST_AUTO_TEST_CASE(header_from_indexed_parent_statuses)
     BOOST_REQUIRE(foundValid);
     BOOST_REQUIRE(foundInvalid);
 
-    // 1) VALID: the returned pow_hash == that of the isolated engine (same initial seed + same 80 bytes).
+    // 1) VALID: the returned pow_hash == the standalone engine's (same initial seed + same 80 bytes).
     header.nNonce = validNonce;
     const auto in = SerializeHeaderForRandomX(header);
     unsigned char rx_ref[BRISVIA_RANDOMX_HASH_SIZE];
     BOOST_REQUIRE(brisvia_randomx_hash(params.brisviaInitialSeed.begin(), 32, in.data(), in.size(), rx_ref));
     BOOST_CHECK(powHashValid == RandomXOutputToUint256(rx_ref));
 
-    // 2) BAD_RANDOMX_POW: the same header (nBits/parent OK) with a nonce that does not meet.
+    // 2) BAD_RANDOMX_POW: the same header (nBits/parent OK) with a nonce that does not meet the target.
     header.nNonce = invalidNonce;
     BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(parent, header, params, nullptr) == RandomXHeaderStatus::BAD_RANDOMX_POW);
 
@@ -406,20 +406,20 @@ BOOST_AUTO_TEST_CASE(header_from_indexed_parent_statuses)
     BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(nullptr, header, params, nullptr) == RandomXHeaderStatus::BAD_PREV_BLOCK);
 
     // 4) BAD_BITS: nBits in range but != the one expected by ASERT (wrong difficulty). Cut off before RandomX.
-    { CBlockHeader h = header; h.nBits = 0x1e0fffff; // valid in range (~2^236), different from expected easyBits
+    { CBlockHeader h = header; h.nBits = 0x1e0fffff; // valid in range (~2^236), different from the expected easyBits
       BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(parent, h, params, nullptr) == RandomXHeaderStatus::BAD_BITS); }
     // nBits out of range (0) -> BAD_BITS.
     { CBlockHeader h = header; h.nBits = 0;
       BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(parent, h, params, nullptr) == RandomXHeaderStatus::BAD_BITS); }
 
-    // 5) INTERNAL_ERROR: LOCAL node failure/bad config, NEVER consensus invalidity (do not ban peers).
+    // 5) INTERNAL_ERROR: LOCAL node failure/misconfiguration, NEVER a consensus invalidity (do not ban peers).
     { Consensus::Params bad = params; bad.fPowRandomX = false;
       BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(parent, header, bad, nullptr) == RandomXHeaderStatus::INTERNAL_ERROR); }
     { Consensus::Params bad = params; bad.asertAnchorParams.reset();
       BOOST_CHECK(CheckRandomXHeaderFromIndexedParent(parent, header, bad, nullptr) == RandomXHeaderStatus::INTERNAL_ERROR); }
 }
 
-// Phase 3A-2 (refactor equivalence): the by-VALUES ASERT variant gives EXACTLY the same as the indexed one
+// Phase 3A-2 (refactor equivalence): the by-VALUES ASERT variant yields EXACTLY the same as the indexed one
 // (the latter delegates to the former). Compared across three time profiles, for several heights.
 BOOST_AUTO_TEST_CASE(asert_values_equivalence)
 {
@@ -454,8 +454,8 @@ BOOST_AUTO_TEST_CASE(asert_values_equivalence)
     }
 }
 
-// Phase 3A-2 (resolution): the transient branch correctly resolves the SEED by height at the crossings (63->64, epoch
-// 2048), the 2112 circular window suffices (sufficiency), and the difficulty dispatch (constant vs expected)
+// Phase 3A-2 (resolution): the transient branch correctly resolves the SEED by height at the crossings (63->64,
+// epoch 2048), the 2112 circular window suffices (sufficiency), and the difficulty dispatch (constant vs expected)
 // is correct. Without running RandomX: SYNTHETIC block ids are populated via CommitRandomXBranchHeader (fast).
 BOOST_AUTO_TEST_CASE(branch_context_resolution)
 {
@@ -482,7 +482,7 @@ BOOST_AUTO_TEST_CASE(branch_context_resolution)
         hd.nNonce = static_cast<uint32_t>(height); // unique block id per height
         return hd;
     };
-    // Helper: adds (without mining) a synthetic header as the new tip and records its block id.
+    // Helper: appends (without mining) a synthetic header as the new tip and records its block id.
     auto avanzar = [&]() {
         CBlockHeader hd = candidato(ctx.tipHeight + 1);
         blockIdByHeight.push_back(hd.GetHash());
@@ -501,13 +501,13 @@ BOOST_AUTO_TEST_CASE(branch_context_resolution)
       BOOST_CHECK(r.seedHash == blockIdByHeight[0]); }          // height 64 -> hash of block 0 (the anchor)
 
     // --- Sufficiency of the 2112 window: epoch-2048 seed (transient) used at 2112 ---
-    while (ctx.tipHeight < 2111) avanzar();      // tip = 2111 (block at height 2048 already committed)
+    while (ctx.tipHeight < 2111) avanzar();      // tip = 2111 (the height-2048 block has already been committed)
     { BranchResolved r; CBlockHeader c = candidato(2112);
       BOOST_CHECK(ResolveRandomXBranchContext(ctx, c, params, r) == BranchResolveStatus::OK);
-      BOOST_CHECK(r.seedHash == blockIdByHeight[2048]); }       // hash of the transient at height 2048
+      BOOST_CHECK(r.seedHash == blockIdByHeight[2048]); }       // hash of the height-2048 transient
 
     // Edge: block id 2048 must stay alive until the last candidate of its epoch (4159), and only then
-    // rotates to 4096. We advance to 4158 and check both sides of the edge.
+    // rotate to 4096. We advance to 4158 and check both sides of the edge.
     while (ctx.tipHeight < 4158) avanzar();      // tip = 4158
     { BranchResolved r; CBlockHeader c = candidato(4159);
       BOOST_CHECK(ResolveRandomXBranchContext(ctx, c, params, r) == BranchResolveStatus::OK);
@@ -517,7 +517,7 @@ BOOST_AUTO_TEST_CASE(branch_context_resolution)
       BOOST_CHECK(ResolveRandomXBranchContext(ctx, c, params, r) == BranchResolveStatus::OK);
       BOOST_CHECK(r.seedHash == blockIdByHeight[4096]); }       // 4160 already rotates to seed 4096
 
-    // --- Difficulty dispatch: with nBits != the expected one -> BAD_BITS (constant difficulty) ---
+    // --- Difficulty dispatch: with nBits != the expected -> BAD_BITS (constant difficulty) ---
     { BranchResolved r; CBlockHeader c = candidato(ctx.tipHeight + 1); c.nBits = 0x1e0fffff;
       BOOST_CHECK(ResolveRandomXBranchContext(ctx, c, params, r) == BranchResolveStatus::BAD_BITS); }
     // Broken continuity -> BAD_PREV_BLOCK.
@@ -526,7 +526,7 @@ BOOST_AUTO_TEST_CASE(branch_context_resolution)
 }
 
 // Phase 3A-2 (seed indexed via a side branch): when an epoch's seed falls in the ALREADY-indexed part, it is
-// resolved via pindexAnchor->GetAncestor (the anchor's branch), NOT via the active chain. Anchor at 2050.
+// resolved via pindexAnchor->GetAncestor (the anchor's branch), NOT the active chain. Anchor at 2050.
 BOOST_AUTO_TEST_CASE(branch_context_seed_indexed_via_ancestor)
 {
     const uint32_t bits = 0x207fffff;
@@ -552,14 +552,14 @@ BOOST_AUTO_TEST_CASE(branch_context_seed_indexed_via_ancestor)
     // candidate 2112: seedHeight=2048 <= anchor height (2050) -> resolved via the anchor's GetAncestor(2048).
     { BranchResolved r; CBlockHeader c = candidato(2112);
       BOOST_CHECK(ResolveRandomXBranchContext(ctx, c, params, r) == BranchResolveStatus::OK);
-      BOOST_CHECK(r.seedHash == hashes[2048]); } // indexed block id at height 2048, via the anchor's branch
+      BOOST_CHECK(r.seedHash == hashes[2048]); } // indexed block id of height 2048, via the anchor's branch
 }
 
-// Phase 3A-2 (full validation + advance): mine real RandomX over the transient branch, crossing the seed change
-// at 64 (initial seed -> hash of block 0). Checks distinguished causes and NO-mutation on error.
+// Phase 3A-2 (full validation + advance): real RandomX mining over the transient branch, crossing the seed change
+// at 64 (initial seed -> hash of block 0). Verifies distinguished causes and NO-mutation on error.
 BOOST_AUTO_TEST_CASE(branch_context_validate_and_advance)
 {
-    const uint32_t bits = 0x207fffff; // target ~2^255 (mina rapido)
+    const uint32_t bits = 0x207fffff; // target ~2^255 (mines fast)
     Consensus::Params params{};
     params.fPowRandomX = true; params.fPowNoRetargeting = true; params.fPowAllowMinDifficultyBlocks = false;
     { arith_uint256 t; t.SetCompact(bits); params.powLimit = ArithToUint256(t); }
@@ -586,7 +586,7 @@ BOOST_AUTO_TEST_CASE(branch_context_validate_and_advance)
           BOOST_CHECK(CheckAndAdvanceRandomXHeader(ctx, bad, params, nullptr) == RandomXHeaderStatus::BAD_PREV_BLOCK);
           BOOST_CHECK_EQUAL(ctx.tipHeight, hBefore); }
 
-        // Mine the valid header (find a nonce that meets). Nonce-invalid ones are only PoW and do not mutate.
+        // Mine the valid header (find a nonce that meets the target). Nonce-based invalids are PoW-only and do not mutate.
         CBlockHeader hd; hd.nVersion = 1; hd.hashPrevBlock = ctx.tipBlockId; hd.nBits = bits;
         hd.nTime = static_cast<uint32_t>(kChainT0 + target * kChainSpacing);
         bool mined = false; uint256 pow;
@@ -603,7 +603,7 @@ BOOST_AUTO_TEST_CASE(branch_context_validate_and_advance)
     }
     BOOST_CHECK_EQUAL(ctx.tipHeight, startHeight + 5);
 
-    // Bad config (without fPowRandomX) -> INTERNAL_ERROR, not consensus invalidity.
+    // Bad config (no fPowRandomX) -> INTERNAL_ERROR, not a consensus invalidity.
     { Consensus::Params badp = params; badp.fPowRandomX = false;
       CBlockHeader hd; hd.nVersion = 1; hd.hashPrevBlock = ctx.tipBlockId; hd.nBits = bits; hd.nNonce = 0;
       hd.nTime = static_cast<uint32_t>(kChainT0 + 66 * kChainSpacing);
@@ -611,7 +611,7 @@ BOOST_AUTO_TEST_CASE(branch_context_validate_and_advance)
 }
 
 // Mines the regtest GENESIS block with RandomX (not SHA256d) and records the values for chainparams.
-// Key point: the block's SHA256d id does NOT need to meet the target; the one that meets it is
+// Key point (ChatGPT): the block's SHA256d ID does NOT have to meet the target; the one that meets it is
 // RandomX. Reward 0 with OP_RETURN <anchor> (fair-launch lock, no one's key).
 BOOST_AUTO_TEST_CASE(mine_regtest_genesis)
 {
@@ -624,7 +624,7 @@ BOOST_AUTO_TEST_CASE(mine_regtest_genesis)
     params.fPowRandomX = true;
     { arith_uint256 t; t.SetCompact(nBits); params.powLimit = ArithToUint256(t); }
 
-    // Genesis with the reusable constructor (same one chainparams uses). Fixed 32-byte test anchor.
+    // Genesis via the reusable constructor (the same chainparams will use). Fixed 32-byte test anchor.
     unsigned char anchor[32]; std::memset(anchor, 0xAB, sizeof(anchor));
     CBlock genesis = CreateBrisviaGenesisBlock(pszTimestamp, anchor, nTime, /*nNonce=*/0, nBits, /*nVersion=*/1);
 
@@ -660,10 +660,10 @@ BOOST_AUTO_TEST_CASE(mine_regtest_genesis)
     BOOST_TEST_MESSAGE("seed       = " << seed.GetHex());
 }
 
-// Mines the Brisvia TESTNET GENESIS block with RandomX. Own constants (phrase, anchor, seed, time)
-// different from regtest -> different genesis -> separate network identity. Prints the values to freeze in
+// Mines the Brisvia TESTNET GENESIS block with RandomX. Its own constants (phrase, anchor, seed, time)
+// differ from regtest -> different genesis -> separate network identity. Prints the values to freeze in
 // chainparams (same procedure as mine_regtest_genesis). The genesis target is easy (mines instantly);
-// the REAL testnet difficulty is governed by ASERT (fPowNoRetargeting=false in chainparams).
+// the testnet's REAL difficulty is governed by ASERT (fPowNoRetargeting=false in chainparams).
 BOOST_AUTO_TEST_CASE(mine_testnet_genesis)
 {
     const char* pszTimestamp = "Brisvia testnet genesis - rx/brva-v1";
@@ -702,10 +702,10 @@ BOOST_AUTO_TEST_CASE(mine_testnet_genesis)
     BOOST_TEST_MESSAGE("seed       = " << seed.GetHex());
 }
 
-// Mines the CANONICAL GENESIS of the Brisvia testnet (ChainType::BRISVIA_TESTNET). Unlike the trial, it uses:
-//  - a real launch nTime (prevents ASERT from starting "behind" and leaving the difficulty at the floor).
-//  - a CALIBRATED nBits (harder than powLimit) as the ASERT anchor, to avoid a block storm at the start.
-// Validated corrections. Prints the values to freeze in chainparams.
+// Mines the CANONICAL GENESIS of the Brisvia testnet (ChainType::BRISVIA_TESTNET). Unlike the rehearsal, it uses:
+//  - real launch nTime (prevents ASERT from starting "behind" and leaving difficulty at the floor).
+//  - CALIBRATED nBits (harder than powLimit) as the ASERT anchor, to avoid a block storm at the start.
+// Fixes validated with ChatGPT (2026-07-07). Prints the values to freeze in chainparams.
 BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
 {
     const char* pszTimestamp = "Brisvia testnet genesis - rx/brva-v1";
@@ -715,7 +715,7 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
 
     Consensus::Params params{};
     params.fPowRandomX = true;
-    { arith_uint256 t; t.SetCompact(nBits); params.powLimit = ArithToUint256(t); } // powLimit >= genesis target to mine it
+    { arith_uint256 t; t.SetCompact(nBits); params.powLimit = ArithToUint256(t); } // powLimit >= genesis target so it can be mined
 
     unsigned char anchor[32]; std::memset(anchor, 0xB2, sizeof(anchor));
     CBlock genesis = CreateBrisviaGenesisBlock(pszTimestamp, anchor, nTime, /*nNonce=*/0, nBits, /*nVersion=*/1);
@@ -741,7 +741,7 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
     BOOST_CHECK_EQUAL(genesis.hashMerkleRoot.GetHex(),
                       "2568cf9e1033415283e52c8ef0f548958edf434f428496df25085a637033004b");
 
-    BOOST_TEST_MESSAGE("=== CANONICAL Brisvia testnet GENESIS (values for chainparams) ===");
+    BOOST_TEST_MESSAGE("=== CANONICAL GENESIS testnet Brisvia (values for chainparams) ===");
     BOOST_TEST_MESSAGE("nTime      = " << genesis.nTime);
     BOOST_TEST_MESSAGE("nBits      = 0x1e7fffff");
     BOOST_TEST_MESSAGE("nNonce     = " << genesis.nNonce);
@@ -750,8 +750,57 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
     BOOST_TEST_MESSAGE("powHash    = " << powHash.GetHex());
 }
 
-// RandomX consistency VECTOR C++ <-> Rust (miner Step 2.1). FIXED input and seed -> expected hash.
-// The Rust miner MUST reproduce exactly these 32 bytes; otherwise mining does not start.
+// Mines the CANONICAL GENESIS of the Brisvia MAINNET (ChainType::BRISVIA_MAIN). Same mechanics as the testnet:
+//  - real mainnet launch nTime (1 Aug 2026 12:00 ART = 15:00 UTC = Unix 1785596400).
+//  - genesis phrase in English (fair launch, no premine).
+//  - mainnet's own anchor 0xB3 (testnet uses 0xB2) + initial nBits 0x1e7fffff (ASERT anchor).
+// Prints the values to freeze in CBrisviaMainParams.
+BOOST_AUTO_TEST_CASE(mine_brisvia_mainnet_genesis)
+{
+    const char* pszTimestamp = "No privilege at genesis: an open network, mined and sustained by the people.";
+    uint256 seed; std::memset(seed.begin(), 0x54, 32);  // initial RandomX seed (same as testnet)
+    const uint32_t nBits = 0x1e7fffff;
+    const uint32_t nTime = 1785596400;                  // 2026-08-01 15:00:00 UTC (1 Aug 12:00 ART)
+
+    Consensus::Params params{};
+    params.fPowRandomX = true;
+    { arith_uint256 t; t.SetCompact(nBits); params.powLimit = ArithToUint256(t); }
+
+    unsigned char anchor[32]; std::memset(anchor, 0xB3, sizeof(anchor)); // mainnet's own anchor
+    CBlock genesis = CreateBrisviaGenesisBlock(pszTimestamp, anchor, nTime, /*nNonce=*/0, nBits, /*nVersion=*/1);
+
+    uint256 powHash;
+    bool mined = false;
+    for (uint32_t nNonce = 0; nNonce < (1u << 23); ++nNonce) {
+        genesis.nNonce = nNonce;
+        if (CheckRandomXHeaderWithResolvedContext(genesis, nBits, seed, params, &powHash) == PoWCheckResult::VALID) {
+            mined = true;
+            break;
+        }
+    }
+    BOOST_REQUIRE(mined);
+
+    arith_uint256 target; target.SetCompact(nBits);
+    BOOST_CHECK(UintToArith256(powHash) <= target);
+
+    // FROZEN values of the mainnet canonical genesis (regression).
+    BOOST_CHECK_EQUAL(genesis.nNonce, 90424u);
+    BOOST_CHECK_EQUAL(genesis.GetHash().GetHex(),
+                      "7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff");
+    BOOST_CHECK_EQUAL(genesis.hashMerkleRoot.GetHex(),
+                      "c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d");
+
+    BOOST_TEST_MESSAGE("=== CANONICAL GENESIS mainnet Brisvia (values for chainparams) ===");
+    BOOST_TEST_MESSAGE("nTime      = " << genesis.nTime);
+    BOOST_TEST_MESSAGE("nBits      = 0x1e7fffff");
+    BOOST_TEST_MESSAGE("nNonce     = " << genesis.nNonce);
+    BOOST_TEST_MESSAGE("merkleRoot = " << genesis.hashMerkleRoot.GetHex());
+    BOOST_TEST_MESSAGE("blockID    = " << genesis.GetHash().GetHex());
+    BOOST_TEST_MESSAGE("powHash    = " << powHash.GetHex());
+}
+
+// RandomX C++ <-> Rust consistency VECTOR (miner Step 2.1). FIXED input and seed -> expected hash.
+// The Rust miner MUST reproduce exactly these 32 bytes; otherwise mining is not started (ChatGPT 2026-07-07).
 BOOST_AUTO_TEST_CASE(brisvia_randomx_vector)
 {
     unsigned char key[32], input[80];
@@ -761,14 +810,14 @@ BOOST_AUTO_TEST_CASE(brisvia_randomx_vector)
     BOOST_REQUIRE(brisvia_randomx_hash(key, sizeof(key), input, sizeof(input), out));
     std::string hex;
     for (int i = 0; i < 32; ++i) { char b[3]; std::snprintf(b, sizeof(b), "%02x", out[i]); hex += b; }
-    BOOST_TEST_MESSAGE("=== VECTOR RandomX Brisvia (referencia para el minero en Rust) ===");
+    BOOST_TEST_MESSAGE("=== RandomX Brisvia VECTOR (reference for the Rust miner) ===");
     BOOST_TEST_MESSAGE("key(32)   = 000102...1f");
     BOOST_TEST_MESSAGE("input(80) = 000102...4f");
     BOOST_TEST_MESSAGE("hash(32)  = " << hex);
     // Frozen as an assert once the Rust miner reproduces it (bilateral contract).
 }
 
-// Brisvia emission: genesis 0, 25 BRVA up to the 1st halving (from block 1), halving, perpetual tail 1.
+// Brisvia emission: genesis 0, 25 BRVA until the 1st halving (from block 1), halving, perpetual tail 1.
 // Small halving interval (10) to cover the edges fast. See consensus/brisvia_emission.h.
 BOOST_AUTO_TEST_CASE(brisvia_emission)
 {
@@ -778,7 +827,7 @@ BOOST_AUTO_TEST_CASE(brisvia_emission)
 
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(0,  INI, TAIL, H), 0);            // genesis: 0
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1,  INI, TAIL, H), INI);          // first block: 25
-    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(10, INI, TAIL, H), INI);          // last of the initial range
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(10, INI, TAIL, H), INI);          // last of the initial stretch
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(11, INI, TAIL, H), INI >> 1);     // 1st halving -> 12.5
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(20, INI, TAIL, H), INI >> 1);     // 12.5
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(21, INI, TAIL, H), INI >> 2);     // 6.25
@@ -788,8 +837,8 @@ BOOST_AUTO_TEST_CASE(brisvia_emission)
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(100000, INI, TAIL, H), TAIL);     // perpetual tail
 }
 
-// Network config: the Brisvia regtest (brisvia_pow option) has RandomX PoW + emission + ASERT anchor +
-// frozen mined genesis + brvrt prefix; the Bitcoin regtest (brisvia_pow=false) stays untouched.
+// Network config: the Brisvia regtest (brisvia_pow option) gets RandomX PoW + emission + ASERT anchor +
+// frozen mined genesis + brvrt prefix; the Bitcoin regtest (brisvia_pow=false) stays intact.
 BOOST_AUTO_TEST_CASE(brisvia_regtest_chainparams)
 {
     CChainParams::RegTestOptions opts;
@@ -809,7 +858,7 @@ BOOST_AUTO_TEST_CASE(brisvia_regtest_chainparams)
                       "38bfbc99c2f734111485d6a1ad4650e89b51759ebb8ae5299abaf42cc1f6cdc2");
     BOOST_CHECK_EQUAL(params->Bech32HRP(), "brvrt");
 
-    // Bitcoin regtest untouched.
+    // Bitcoin regtest left untouched.
     CChainParams::RegTestOptions optsNormal;
     const auto normal = CChainParams::RegTest(optsNormal);
     BOOST_CHECK(!normal->GetConsensus().fPowRandomX);

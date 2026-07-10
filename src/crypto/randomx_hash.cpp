@@ -1,6 +1,6 @@
-// Brisvia — minimal RandomX wrapper. Computes the Proof of Work hash.
+// Brisvia - minimal RandomX wrapper. Computes the Proof of Work hash.
 // "light" mode (cache only, ~256 MiB): used to VERIFY blocks. The miner
-// will use "fast" mode (with dataset, ~2 GiB). Base of Commit 2 of the port.
+// will use "fast" mode (with dataset, ~2 GiB). Basis of Commit 2 of the port.
 #include "randomx_hash.h"
 
 #include <randomx.h>
@@ -14,7 +14,7 @@ bool brisvia_randomx_hash(const unsigned char* key, size_t key_size,
     randomx_cache* cache = randomx_alloc_cache(flags);
     if (cache == nullptr) return false;
 
-    // The "key" is the RandomX seed (in Brisvia it is derived from a block by height).
+    // The "key" is the RandomX seed (in Brisvia it will be derived from a block by height).
     randomx_init_cache(cache, key, key_size);
 
     // dataset = nullptr -> light mode (verification). Without allocating the ~2 GiB of mining mode.

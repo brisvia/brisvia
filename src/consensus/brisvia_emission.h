@@ -1,4 +1,4 @@
-// Brisvia — block subsidy (emission). A PURE, self-contained function: it does not depend on the Bitcoin tree,
+// Brisvia - block subsidy (emission). A PURE, self-contained function: it does not depend on the Bitcoin tree,
 // is tested on its own, and GetBlockSubsidy (validation.cpp) calls it when Brisvia's parameters are set.
 //
 // Rules:

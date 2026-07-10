@@ -1922,10 +1922,10 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
-    // Brisvia: custom emission (genesis 0, initial 25 BRVA, halving from block 1, perpetual tail of 1 BRVA).
-    // Explicit selector (fBrisviaSubsidy), not the tail value: PoW and monetary policy are independent rules;
-    // tying the regime to nBrisviaTailSubsidy>0 could accidentally revert to Bitcoin emission (zero tail /
-    // misinitialized chainparam) = consensus deviation.
+    // Brisvia: custom emission (genesis 0, initial 25 BRVA, halving from block 1, perpetual tail 1 BRVA).
+    // [FIX_REVIEW Phase 2] EXPLICIT selector (fBrisviaSubsidy), not the tail value: PoW and monetary
+    // policy are independent rules; tying the regime to nBrisviaTailSubsidy>0 could revert to Bitcoin
+    // emission by accident (zero tail / misinitialized chainparam) = consensus deviation.
     if (consensusParams.fBrisviaSubsidy) {
         return BrisviaGetBlockSubsidy(nHeight, consensusParams.nBrisviaInitialSubsidy,
                                       consensusParams.nBrisviaTailSubsidy, consensusParams.nSubsidyHalvingInterval);
@@ -3933,9 +3933,9 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    // Brisvia: the real PoW (RandomX) is CONTEXTUAL (it needs the height + branch seed), so it is verified in
-    // ContextualCheckBlockHeader. Here, context-free, only the nBits RANGE is validated (the header's SHA256d
-    // does not have to meet the target; RandomX is what meets it).
+    // Brisvia: the real PoW (RandomX) is CONTEXTUAL (it needs the height + the branch seed), verified in
+    // ContextualCheckBlockHeader. Here, context-free, only the RANGE of nBits is validated (the header's SHA256d
+    // does NOT have to meet the target; the one that meets it is RandomX). See BRISVIA-VALIDATION-INTEGRATION.md.
     if (consensusParams.fPowRandomX) {
         if (fCheckPOW && !DeriveTarget(block.nBits, consensusParams.powLimit))
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "nBits out of range");
@@ -4091,8 +4091,8 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
 
-    // Brisvia: do NOT set fChecked when the real PoW (RandomX) is contextual and was not checked here
-    // (CheckBlockHeader only validated the nBits range). Setting it would leave the block marked as
+    // Brisvia [FIX_REVIEW Phase 2]: do NOT set fChecked when the real PoW (RandomX) is contextual and was not
+    // checked here (CheckBlockHeader only validated the nBits range). Setting it would leave the block as
     // "fully checked" without RandomX -> contract bug (VerifyDB, tools, future refactors).
     if (fCheckPOW && fCheckMerkleRoot && !consensusParams.fPowRandomX)
         block.fChecked = true;
@@ -4147,12 +4147,11 @@ bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consens
 
 bool HasSaneHeaderTargets(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams)
 {
-    // Brisvia: CHEAP preliminary filter for RandomX chains. It does NOT verify the PoW (RandomX is expensive;
-    // running it over a batch of up to 2000 headers would be a DoS before the budget kicks in). The real RandomX
-    // PoW is validated per quantum inside HeadersSyncState (low-work path) and in
-    // AcceptBlockHeader->ContextualCheckBlockHeader (normal path), ALWAYS before crediting chainwork or creating
-    // the index. Here it only checks that nBits is decodable and in range (same criterion as the context-free
-    // CheckBlockHeader). Honest name: it does NOT claim proven work.
+    // Brisvia: CHEAP preliminary filter for RandomX chains. It does NOT verify the PoW (RandomX is expensive; running it over
+    // a batch of up to 2000 headers would be a DoS before the budget check). The real RandomX PoW is validated in quanta
+    // inside HeadersSyncState (low-work path) and in AcceptBlockHeader->ContextualCheckBlockHeader (normal path),
+    // ALWAYS before crediting chainwork or creating the index. Here only that nBits is decodable and within
+    // range is checked (same criterion as CheckBlockHeader context-free). Honest name: it does NOT claim proven work.
     return std::all_of(headers.cbegin(), headers.cend(),
             [&](const auto& header) { return DeriveTarget(header.nBits, consensusParams.powLimit).has_value(); });
 }
@@ -4211,8 +4210,8 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
  *  v0.12 and v0.15 (when no additional protection was in place) whereby an attacker could unboundedly
  *  grow our in-memory block index. See https://bitcoincore.org/en/2024/07/03/disclose-header-spam.
  */
-// Brisvia: fCheckPOW WITHOUT a default value, on purpose: it forces every caller to declare it explicitly and
-// lets the compiler audit that no acceptance path accidentally omits RandomX.
+// Brisvia [FIX_REVIEW Phase 2]: fCheckPOW WITHOUT a default value, on purpose: it forces every caller to declare it
+// explicitly and lets the compiler audit that no acceptance path omits RandomX by accident.
 static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool fCheckPOW) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
@@ -4222,9 +4221,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     // Check proof of work
     const Consensus::Params& consensusParams = chainman.GetConsensus();
     if (consensusParams.fPowRandomX) {
-        // Brisvia: FULL contextual verification (expected nBits by ASERT + RandomX over the 80 bytes).
-        // Tri-state: INVALID = invalid block (reject); INTERNAL_ERROR = local node failure (NOT a consensus
-        // invalidity: do not ban, do not mark the block as invalid).
+        // Brisvia: FULL contextual verification (nBits expected by ASERT + RandomX over the 80 bytes).
+        // Three-state: INVALID = invalid block (reject); INTERNAL_ERROR = local node failure (it is NOT
+        // consensus invalidity: do not ban, do not mark the block as invalid). See BRISVIA-VALIDATION-INTEGRATION.md.
         const PoWCheckResult rx = CheckContextualHeaderWork(block, pindexPrev, nHeight, consensusParams, /*checkRandomX=*/fCheckPOW);
         if (rx == PoWCheckResult::INTERNAL_ERROR)
             return state.Error("brisvia-randomx-internal-error");

@@ -234,8 +234,8 @@ arith_uint256 UintToArith256(const uint256 &a)
 template base_uint<6144>& base_uint<6144>::operator*=(const base_uint<6144>& b);
 template base_uint<6144>& base_uint<6144>::operator/=(const base_uint<6144>& b);
 
-// Brisvia: instanciaciones PUNTUALES de base_uint<512> para CalculateASERT (ASERT). No se instancia la clase
-// completa a proposito: GetHex/ToString dependen de base_blob<512> (no instanciado). Mismo patron que <6144>.
+// Brisvia: SPECIFIC instantiations of base_uint<512> for CalculateASERT (ASERT). The full class is
+// deliberately not instantiated: GetHex/ToString depend on base_blob<512> (not instantiated). Same pattern as <6144>.
 template base_uint<512>& base_uint<512>::operator<<=(unsigned int shift);
 template base_uint<512>& base_uint<512>::operator>>=(unsigned int shift);
 template base_uint<512>& base_uint<512>::operator*=(uint32_t b32);

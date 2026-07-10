@@ -23,6 +23,8 @@ std::string ChainTypeToString(ChainType chain)
         return "regtest";
     case ChainType::BRISVIA_TESTNET:
         return "brisvia-test";
+    case ChainType::BRISVIA_MAIN:
+        return "brisvia";
     }
     assert(false);
 }
@@ -41,6 +43,9 @@ std::optional<ChainType> ChainTypeFromString(std::string_view chain)
         return ChainType::REGTEST;
     } else if (chain == "brisvia-test") {
         return ChainType::BRISVIA_TESTNET;
+    } else if (chain == "brisvia" || chain == "brisvia-main") {
+        // Canonical name "brisvia" (ChainTypeToString); "brisvia-main" is accepted as an alias for compatibility.
+        return ChainType::BRISVIA_MAIN;
     } else {
         return std::nullopt;
     }

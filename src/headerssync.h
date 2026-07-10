@@ -145,13 +145,13 @@ public:
         std::vector<CBlockHeader> pow_validated_headers;
         bool success{false};
         bool request_more{false};
-        /** Brisvia: true if headers from the SAME message remain unprocessed (cut off by the RandomX work
-         * budget). The caller must call ContinuePendingHeaders() again -WITHOUT asking the peer for anything- until
-         * they are drained. Never true together with request_more (the peer is not asked while local work remains). */
+        /** Brisvia: true if headers of the SAME message remain unprocessed (cut off by the RandomX work
+         * budget). The caller must call ContinuePendingHeaders() again -WITHOUT requesting anything from the peer- until
+         * they are drained. It is never true together with request_more (we do not request from the peer while local work remains). */
         bool more_internal_work{false};
-        /** Brisvia: when success==false due to a RandomX PoW rejection (not other causes), carries the exact
-         * cause (BAD_BITS/BAD_RANDOMX_POW/BAD_PREV_BLOCK = hostile peer; INTERNAL_ERROR = local node failure).
-         * The network caller uses it to penalize ONLY the hostile peer (never on INTERNAL_ERROR). Left empty if the
+        /** Brisvia: when success==false due to a RandomX PoW rejection (not other causes), it carries the exact
+         * cause (BAD_BITS/BAD_RANDOMX_POW/BAD_PREV_BLOCK = hostile peer; INTERNAL_ERROR = local failure of the node).
+         * The network caller uses it to penalize ONLY the hostile peer (never for INTERNAL_ERROR). It stays empty if the
          * sync aborted for another reason (e.g. discontinuity), preserving upstream behavior (no ban). */
         std::optional<RandomXHeaderStatus> status;
     };
@@ -182,8 +182,8 @@ public:
     /** Brisvia: are there headers from the last message left unprocessed (cut off by the RandomX budget)? */
     bool HasPendingHeaders() const { return m_pending_pos < m_pending_headers.size(); }
 
-    /** Brisvia: processes the NEXT quantum of the already-received message (does not take new headers from the peer).
-     * Must only be called while HasPendingHeaders(). Returns the same ProcessingResult as ProcessNextHeaders. */
+    /** Brisvia: processes the NEXT quantum of the already-received message (does not take new headers from the peer). It must
+     * only be called while HasPendingHeaders(). Returns the same ProcessingResult as ProcessNextHeaders. */
     ProcessingResult ContinuePendingHeaders();
 
     /** Issue the next GETHEADERS message to our peer.
@@ -219,20 +219,20 @@ private:
     bool ValidateAndProcessSingleHeader(const CBlockHeader& current);
 
     /** If we've reached the minimum work threshold, reset the redownload state and switch to REDOWNLOAD.
-     * Extracted to be shared between the Bitcoin path (full batch) and the Brisvia path (per quantum). */
+     * Extracted to be shared between the Bitcoin path (full batch) and the Brisvia one (per quanta). */
     void MaybeTransitionToRedownload();
 
     /** In REDOWNLOAD, check a header's commitment (if applicable) and add to
      * buffer for later processing */
     bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header);
 
-    /** Brisvia: validates the RandomX PoW of `header` against the transient branch context and ADVANCES it only if
-     * VALID. Must be called BEFORE crediting work (GetBlockProof), both in presync and redownload, to
+    /** Brisvia: validates the RandomX PoW of `header` against the transient branch context and ADVANCES it only if it is
+     * VALID. It must be called BEFORE crediting work (GetBlockProof), both in presync and in redownload, to
      * close the "fake work" DoS. Returns true if work can be credited (VALID, or a chain without
      * RandomX -> no changes); false aborts the sync (hostile data or internal node error). */
     bool BrisviaCheckHeaderRandomX(const CBlockHeader& header);
 
-    /** Brisvia: processes up to BRISVIA_MAX_RANDOMX_PER_QUANTUM headers from the pending batch (from m_pending_pos).
+    /** Brisvia: processes up to BRISVIA_MAX_RANDOMX_PER_QUANTUM headers of the pending batch (from m_pending_pos).
      * The "end of message" logic (PRESYNC->REDOWNLOAD transition, request_more, releasing pow_validated_headers)
      * runs ONLY when consuming the last header of the message, to preserve upstream semantics. If
      * headers remain, it returns more_internal_work=true. Only used with fPowRandomX. */
@@ -309,21 +309,21 @@ private:
     State m_download_state{State::PRESYNC};
 
     /** Brisvia: TRANSIENT branch context to validate RandomX in presync/redownload. Present EXACTLY
-     * when m_consensus_params.fPowRandomX. Initialized from m_chain_start in the constructor, RESET
-     * from m_chain_start when switching to REDOWNLOAD (that phase re-walks the branch from the anchor) and freed in
-     * Finalize(). Does NOT hold heavy RandomX resources (dataset/cache/VM): the VM is a global service per
+     * when m_consensus_params.fPowRandomX. It is initialized from m_chain_start in the constructor, RESET
+     * from m_chain_start when moving to REDOWNLOAD (that phase re-walks the branch from the anchor) and freed in
+     * Finalize(). It does NOT hold heavy RandomX resources (dataset/cache/VM): the VM is a global service per
      * seedHash, not multiplied per peer. */
     std::optional<RandomXHeaderBranchContext> m_randomx_branch_context;
 
-    /** Brisvia: batch of headers from the LAST message that has not yet been fully processed (RandomX work
-     * budget). Processed per quantum from m_pending_pos. Invariant: at most ONE pending message per
-     * sync. Only used with fPowRandomX; for Bitcoin the batch is processed entirely in a single call (untouched). */
+    /** Brisvia: batch of headers from the LAST message not yet fully processed (RandomX work
+     * budget). It is processed in quanta from m_pending_pos. Invariant: at most ONE pending message per
+     * sync. Only used with fPowRandomX; for Bitcoin the batch is processed whole in a single call (untouched). */
     std::vector<CBlockHeader> m_pending_headers;
     size_t m_pending_pos{0};
     bool m_pending_full_headers_message{false};
 
     /** Brisvia: cause of the LAST RandomX PoW rejection within the current quantum (set by
-     * BrisviaCheckHeaderRandomX on failure; reset at the start of each quantum). Copied to
+     * BrisviaCheckHeaderRandomX on failure; reset at the start of each quantum). It is copied to
      * ProcessingResult.status when the quantum aborts due to RandomX, so the network penalizes the hostile peer. */
     std::optional<RandomXHeaderStatus> m_last_randomx_reject;
 };

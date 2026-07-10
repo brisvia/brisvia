@@ -290,7 +290,8 @@ arith_uint256 UintToArith256(const uint256 &);
 
 extern template class base_uint<256>;
 
-// Brisvia: 512-bit integer for ASERT's intermediate calculations (avoids overflow).// Only used inside CalculateASERT.
+// Brisvia: 512-bit integer for the intermediate calculations of ASERT (avoids overflow). See
+// core-port/consensus/BRISVIA-POW-PORT.md section 8. Only used inside CalculateASERT.
 class arith_uint512 : public base_uint<512> {
 public:
     arith_uint512() {}
@@ -301,7 +302,7 @@ public:
 // suppresses the implicit instantiation of ALL members, including the copy constructor used by
 // operator>>/operator<< when returning by value. Under -O2 the compiler resolved it via inlining, but under -O0
 // (Debug/ASan build) the link failed (undefined reference to the copy ctor). Without `extern template`, each TU
-// implicitly instantiates only what it uses (GetHex/ToString are NOT used -> they do not pull in base_blob<512>).
-// Same pattern as base_uint<6144> (which also carries no extern template). Detected by the ASan build.
+// implicitly instantiates only what it uses (GetHex/ToString are NOT used -> they do not drag in base_blob<512>).
+// Same pattern as base_uint<6144> (which also does not carry extern template). Detected by the ASan build 2026-07-05.
 
 #endif // BITCOIN_ARITH_UINT256_H

@@ -32,11 +32,11 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 {
     assert(pindexLast != nullptr);
 
-    // Brisvia: with RandomX + ASERT anchor, difficulty adjusts by ASERT-BRVA-v1 from the very first block
+    // Brisvia: with RandomX + ASERT anchor, difficulty is adjusted by ASERT-BRVA-v1 from the first block
     // (synthetic parent at the genesis anchor). The classic 2016 retarget (below) stays inert on main/test.
-    // Additive: on regtest and on the Bitcoin tree without these parameters, the original behaviour is preserved.
+    // Additive: on regtest and on the Bitcoin tree without these params, the original behavior is preserved.
     if (params.fPowRandomX && params.asertAnchorParams.has_value()) {
-        // regtest: constant difficulty (ASERT must not react to the tests' instant blocks).
+        // regtest: constant difficulty (ASERT must not react to the instant blocks of the tests).
         if (params.fPowNoRetargeting) return pindexLast->nBits;
         return GetNextASERTWorkRequired(pindexLast, pblock, params);
     }
@@ -117,10 +117,10 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
 {
     if (params.fPowAllowMinDifficultyBlocks) return true;
 
-    // Brisvia: ASERT-BRVA-v1 changes nBits EVERY block, so the "factor of 4 only at 2016 boundaries" window
-    // below would REJECT valid ASERT blocks. With ASERT active, the exact nBits value is validated by comparing
-    // against GetNextWorkRequired (ASERT) in ContextualCheckBlockHeader; the 2016 rule is not applied here.
-    // Additive: without these parameters (regtest / base tree), the original logic is preserved.
+    // Brisvia [audit R6]: ASERT-BRVA-v1 changes nBits EVERY block, so the "factor 4 only at 2016 boundaries"
+    // window below would REJECT valid ASERT blocks. With ASERT active, the exact nBits value is validated by
+    // comparing against GetNextWorkRequired (ASERT) in ContextualCheckBlockHeader; the 2016 rule is not applied
+    // here. Additive: without these params (regtest / base tree), the original logic is preserved.
     if (params.fPowRandomX && params.asertAnchorParams.has_value()) return true;
 
     if (height % params.DifficultyAdjustmentInterval() == 0) {
@@ -204,9 +204,10 @@ bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Par
 }
 
 // ===================== Brisvia: ASERT-BRVA-v1 (difficulty adjustment) =====================
+// See core-port/consensus/BRISVIA-POW-PORT.md section 8 and BRISVIA-CHAINPARAMS.md.
 // CalculateASERT: aserti3 formula (Bitcoin Cash/ScashX) with arith_uint512 in the intermediates. Validated
 // against the Python oracle: 8160 vectors, 0 failures. Additive: GetNextWorkRequired does not call it yet
-// (it hooks in once the Brisvia chainparams are present), so it does not change the current consensus.
+// (it is wired in once the Brisvia chainparams are present), so it does not change the current consensus.
 arith_uint256 CalculateASERT(const arith_uint256& refTarget,
                              const int64_t nPowTargetSpacing,
                              const int64_t nTimeDiff,
@@ -220,7 +221,7 @@ arith_uint256 CalculateASERT(const arith_uint256& refTarget,
 
     const int64_t exponent = ((nTimeDiff - nPowTargetSpacing * (nHeightDiff + 1)) * 65536) / nHalfLife;
 
-    static_assert(int64_t(-1) >> 1 == int64_t(-1), "ASERT requires an arithmetic right shift");
+    static_assert(int64_t(-1) >> 1 == int64_t(-1), "ASERT needs arithmetic shift");
 
     int64_t shifts = exponent >> 16;
     const auto frac = uint16_t(exponent);
@@ -264,7 +265,7 @@ arith_uint256 CalculateASERT(const arith_uint256& refTarget,
 // GetNextASERTWorkRequired: next nBits using the Brisvia anchor (genesis with a "synthetic parent").
 // Unlike ScashX, it does NOT require pindexPrev->pprev: the synthetic parent lives in anchor.nPrevBlockTime.
 // PURE by-VALUES variant: absolute ASERT only needs the parent's HEIGHT and TIME (it does not walk ancestors).
-// Used by the transient branch of the headers sync, where the parent may not have a CBlockIndex.
+// Used by the transient branch of the headers sync (Phase 3A-2), where the parent may have no CBlockIndex.
 uint32_t GetNextASERTWorkRequiredFromValues(int prevHeight, int64_t prevTime,
                                             const CBlockHeader* pblock,
                                             const Consensus::Params& params) noexcept
@@ -273,7 +274,7 @@ uint32_t GetNextASERTWorkRequiredFromValues(int prevHeight, int64_t prevTime,
     const Consensus::Params::ASERTAnchor& anchor = *params.asertAnchorParams;
     assert(prevHeight >= anchor.nHeight);
 
-    // Special minimum-difficulty rule (only if enabled: testnet/regtest).
+    // Special min-difficulty rule (only if enabled: testnet/regtest).
     if (params.fPowAllowMinDifficultyBlocks &&
         (pblock->GetBlockTime() > prevTime + 2 * params.nPowTargetSpacing)) {
         return UintToArith256(params.powLimit).GetCompact();
@@ -300,15 +301,15 @@ uint32_t GetNextASERTWorkRequired(const CBlockIndex* pindexPrev,
 }
 
 // ===================== Brisvia: PURE RandomX input/output functions =====================
-// EXPLICIT endianness.
+// See core-port/consensus/BRISVIA-POW-PORT.md section 2. EXPLICIT endianness (audit R5).
 std::array<unsigned char, BRISVIA_RANDOMX_INPUT_SIZE> SerializeHeaderForRandomX(const CBlockHeader& block)
 {
-    static_assert(BRISVIA_RANDOMX_INPUT_SIZE == 80, "Brisvia's RandomX header is 80 bytes");
+    static_assert(BRISVIA_RANDOMX_INPUT_SIZE == 80, "the Brisvia RandomX header is 80 bytes");
     std::array<unsigned char, BRISVIA_RANDOMX_INPUT_SIZE> out{};
     unsigned char* p = out.data();
 
-    // Field by field, with fixed offsets and explicit little-endian. Matches byte for byte Bitcoin's
-    // standard network serialization (CBlockHeader::Serialize), but does not depend on it.
+    // Field by field, with fixed offsets and explicit little-endian. Matches byte for byte the
+    // standard Bitcoin network serialization (CBlockHeader::Serialize), but does not depend on it.
     WriteLE32(p + 0,  static_cast<uint32_t>(block.nVersion));   // version   [0..3]
     std::memcpy(p + 4,  block.hashPrevBlock.begin(), 32);       // prevBlock  [4..35]
     std::memcpy(p + 36, block.hashMerkleRoot.begin(), 32);      // merkleRoot [36..67]
@@ -321,8 +322,8 @@ std::array<unsigned char, BRISVIA_RANDOMX_INPUT_SIZE> SerializeHeaderForRandomX(
 arith_uint256 RandomXOutputToTargetInteger(const unsigned char (&rx)[32])
 {
     // Fixed rule: little-endian. The 32 bytes are copied into uint256's internal buffer (which is LE) and
-    // converted with UintToArith256; thus rx[0] is the least significant byte. Same convention as the rest
-    // of Bitcoin's consensus (target/hash). Documented and covered by vectors.
+    // converted with UintToArith256; thus rx[0] is the least significant byte. Same convention as the
+    // rest of the Bitcoin consensus (target/hash). Documented and covered by vectors.
     uint256 h;
     std::memcpy(h.begin(), rx, 32);
     return UintToArith256(h);
@@ -335,8 +336,8 @@ uint256 RandomXOutputToUint256(const unsigned char (&rx)[32])
     return h;
 }
 
-// RandomX seed by HEIGHT. Deterministic and robust against timestamp manipulation and reorgs: the key comes
-// from an earlier block of the CANDIDATE BRANCH.
+// RandomX seed by HEIGHT (see BRISVIA-POW-PORT.md section 3). Deterministic and robust against
+// timestamp manipulation and reorgs: the key comes from an earlier block of the CANDIDATE BRANCH.
 uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Consensus::Params& params)
 {
     assert(nHeight >= 0);
@@ -344,7 +345,7 @@ uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Con
     if (BrisviaUsesInitialSeed(nHeight)) {
         return params.brisviaInitialSeed;
     }
-    // Height of the block whose hash is the seed. Guaranteed seedHeight <= nHeight-64 <= pindexPrev->nHeight.
+    // Height of the block whose hash is the seed. seedHeight <= nHeight-64 <= pindexPrev->nHeight is guaranteed.
     const int seedHeight = BrisviaSeedHeight(nHeight);
     assert(pindexPrev != nullptr);
     assert(seedHeight >= 0 && seedHeight <= pindexPrev->nHeight);
@@ -354,17 +355,18 @@ uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Con
 }
 
 // ===================== Brisvia: RandomX engine (VM) management =====================
-// Corrections applied:
-//  - LRU indexed by SEED (uint256), NEVER by epoch.
-//  - REAL single-flight even under eviction: construction is serialized with g_rx_build_mutex (one 256 MiB
-//    cache at a time) and the map is re-checked after acquiring it, so two threads NEVER build the same
+// See core-port/consensus/BRISVIA-POW-PORT.md section 4/5. Corrections applied (audit + FIX_REVIEW
+// design reference):
+//  - LRU indexed by SEED (uint256), NEVER by epoch [R2].
+//  - REAL single-flight even under eviction: construction is serialized with g_rx_build_mutex (one cache
+//    of 256 MiB at a time) and the map is re-checked after acquiring it, so two threads NEVER build the same
 //    seed (nor two different seeds at once -> avoids RAM/OOM spikes).
 //  - NON-permanent failure: a local failure marks the seed FAILED with backoff (5s/30s/2m/5m); after the
 //    cooldown it is retried once. A transient OOM does not disable the epoch until restart.
 //  - BuildLightVM is RAII + exception-safe: a bad_alloc does not leak cache/vm nor take down the node.
-//  - Sanitized flag ladder: light (FULL_MEM/LARGE_PAGES off), no duplicates, and when JIT is removed SECURE
-//    is removed too. JIT and interpreter produce the SAME hash (a RandomX guarantee), it is not consensus.
-//  - Evicted objects are destroyed OUTSIDE g_rx_mutex (freeing ~256 MiB does not block lookups).
+//  - Sanitized flag ladder [6.3]: light (FULL_MEM/LARGE_PAGES off), no duplicates, and when JIT is dropped
+//    SECURE is dropped too. JIT and interpreter produce the SAME hash (RandomX guarantee), it is not consensus.
+//  - Evicted objects are destroyed OUTSIDE g_rx_mutex (freeing ~256 MiB does not block the queries).
 namespace {
 
 struct RandomXCacheWrapper {
@@ -379,7 +381,7 @@ using RandomXCacheRef = std::shared_ptr<RandomXCacheWrapper>;
 struct RandomXVMWrapper {
     randomx_vm* vm{nullptr};
     RandomXCacheRef cache;          // keeps the cache alive while the VM exists
-    std::mutex hashing_mutex;       // a VM cannot hash from two threads at once
+    std::mutex hashing_mutex;       // a VM cannot hash from two threads at once [R7]
     RandomXVMWrapper(randomx_vm* v, RandomXCacheRef c) : vm(v), cache(std::move(c)) {}
     ~RandomXVMWrapper() { if (vm) randomx_destroy_vm(vm); } // destroy the VM before releasing the cache
     RandomXVMWrapper(const RandomXVMWrapper&) = delete;
@@ -397,21 +399,21 @@ using VMUnique    = std::unique_ptr<randomx_vm, RandomXVMDeleter>;
 struct RandomXSlot {
     RandomXVMRef vm;
 };
-// Negative cache SEPARATE from the VM LRU: a failure does not occupy 256 MiB, must not evict a healthy VM,
-// nor lose its backoff when the LRU rotates. It is just metadata, with its own larger limit.
+// Negative cache SEPARATE from the VM LRU [FIX_REVIEW round 2]: a failure does not take 256 MiB, must not evict
+// a healthy VM, nor lose its backoff when the LRU rotates. It is just metadata, with its own larger limit.
 struct RandomXFailure {
     int fail_count{0};
     std::chrono::steady_clock::time_point retry_after{};
 };
 
 // uint256 hash for the map: the first 8 bytes are already practically uniform (it is a block hash).
-// The map's equality still compares all 256 bits, so this does not affect correctness, only distribution.
+// The map's equality still compares the 256 bits, so this does not affect correctness, only distribution.
 struct SeedHasher {
     size_t operator()(const uint256& h) const noexcept { return ReadLE64(h.begin()); }
 };
 
 std::mutex g_rx_mutex;            // protects the map + the recency list (short sections)
-std::mutex g_rx_build_mutex;      // serializes VM CONSTRUCTION (one 256 MiB cache at a time)
+std::mutex g_rx_build_mutex;      // serializes VM CONSTRUCTION (one cache of 256 MiB at a time)
 std::list<uint256> g_rx_lru;      // front = most recent
 std::unordered_map<uint256, std::pair<std::shared_ptr<RandomXSlot>, std::list<uint256>::iterator>, SeedHasher> g_rx_slots;
 std::unordered_map<uint256, RandomXFailure, SeedHasher> g_rx_failures; // negative cache (lightweight, separate)
@@ -421,13 +423,13 @@ size_t g_rx_capacity{3};
 constexpr size_t g_rx_failures_cap{64}; // the negative cache is metadata: its own limit, much larger than the VMs
 std::atomic<uint64_t> g_rx_build_count{0}; // instrumentation only, for the single-flight test
 
-// Leaves the flags for the VALIDATOR: light mode (FULL_MEM off, that is the miner's) and LARGE_PAGES off
+// Leaves the flags for the VALIDATOR: light mode (FULL_MEM off, that belongs to the miner) and LARGE_PAGES off
 // (avoids permission failures). Keeps JIT/HARD_AES/ARGON2/SECURE if the OS offers them.
 randomx_flags SanitizeValidatorFlags(randomx_flags f)
 {
-    // Test/portability hook: force the portable interpreter (no JIT) if the operator requests it via the environment.
+    // Test/portability hook: force the portable interpreter (no JIT) if the operator requests it via env.
     // Main use: run sanitizers (TSan/ASan) without the JIT, whose runtime-generated code is neither observable
-    // nor compatible with the instrumentation. Inactive by default: does not change the node's normal behaviour.
+    // nor compatible with the instrumentation. Inactive by default: does not change the node's normal behavior.
     if (std::getenv("BRISVIA_RX_FORCE_INTERPRETER") != nullptr) return RANDOMX_FLAG_DEFAULT;
     int v = static_cast<int>(f);
     v &= ~static_cast<int>(RANDOMX_FLAG_FULL_MEM);
@@ -445,13 +447,13 @@ std::chrono::seconds BackoffFor(int fail_count)
     }
 }
 
-// Builds a light VM for `seedHash`. RAII + exception-safe. Returns null on failure (local failure).
+// Builds a light VM for `seedHash`. RAII + exception-safe. Returns null if it could not (local failure).
 RandomXVMRef BuildLightVM(const uint256& seedHash)
 {
     g_rx_build_count.fetch_add(1, std::memory_order_relaxed);
     const randomx_flags base = SanitizeValidatorFlags(randomx_get_flags());
     const int b = static_cast<int>(base);
-    // When removing JIT, SECURE is also removed (it only makes sense with JIT).
+    // When JIT is dropped SECURE is dropped too (it only makes sense with JIT).
     const randomx_flags noJit = static_cast<randomx_flags>(
         b & ~static_cast<int>(RANDOMX_FLAG_JIT) & ~static_cast<int>(RANDOMX_FLAG_SECURE));
     const randomx_flags candidates[] = { base, noJit, RANDOMX_FLAG_DEFAULT };
@@ -470,8 +472,8 @@ RandomXVMRef BuildLightVM(const uint256& seedHash)
             randomx_init_cache(cache.get(), seedHash.begin(), seedHash.size()); // key = 32 bytes
             VMUnique vm{randomx_create_vm(f, cache.get(), nullptr)};            // light: cache, no dataset
             if (!vm) continue;
-            // Release the unique_ptr ONLY after a definitive owner exists (avoids a leak if make_shared
-            // throws bad_alloc).
+            // Release the unique_ptrs ONLY after a definitive owner exists (avoids a leak if make_shared
+            // throws bad_alloc). [FIX_REVIEW round 2, 4.1]
             auto cacheRef = std::make_shared<RandomXCacheWrapper>(cache.get());
             cache.release();
             auto vmRef = std::make_shared<RandomXVMWrapper>(vm.get(), cacheRef);
@@ -479,10 +481,10 @@ RandomXVMRef BuildLightVM(const uint256& seedHash)
             return vmRef;
         }
     } catch (const std::exception& e) {
-        LogPrintf("Brisvia: exception while creating the RandomX VM (%s)\n", e.what());
+        LogPrintf("Brisvia: exception creating the RandomX VM (%s)\n", e.what());
         return nullptr;
     } catch (...) {
-        LogPrintf("Brisvia: unknown exception while creating the RandomX VM\n");
+        LogPrintf("Brisvia: unknown exception creating the RandomX VM\n");
         return nullptr;
     }
     LogPrintf("Brisvia: could not create the RandomX VM for seed %s\n", seedHash.GetHex());
@@ -494,15 +496,15 @@ std::shared_ptr<RandomXSlot> TouchSlot(const uint256& seedHash)
 {
     auto it = g_rx_slots.find(seedHash);
     if (it == g_rx_slots.end()) return nullptr;
-    // splice moves the existing node to the front WITHOUT allocating memory (no-throw): it leaves no dangling
-    // iterators, unlike erase+push_front would if push_front threw.
+    // splice moves the existing node to the front WITHOUT allocating memory (no-throw): it does not leave
+    // dangling iterators as erase+push_front would if push_front threw. [FIX_REVIEW round 2, 4.2]
     g_rx_lru.splice(g_rx_lru.begin(), g_rx_lru, it->second.second);
     it->second.second = g_rx_lru.begin();
     return it->second.first;
 }
 
-// Queries the caches (requires g_rx_mutex held). Returns the VM if ready. Sets `inCooldown` to true if the
-// seed is in failure cooldown (=> INTERNAL_ERROR without rebuilding). nullptr + !inCooldown => build.
+// Queries the caches (requires g_rx_mutex held). Returns the VM if it is ready. Sets `inCooldown` to true
+// if the seed is in failure cooldown (=> INTERNAL_ERROR without rebuilding). nullptr + !inCooldown => build.
 RandomXVMRef LookupLocked(const uint256& seedHash, bool& inCooldown)
 {
     inCooldown = false;
@@ -539,8 +541,8 @@ RandomXVMRef GetBrisviaVM(const uint256& seedHash)
     // 3) Build outside g_rx_mutex (expensive operation), but under g_rx_build_mutex (one at a time).
     RandomXVMRef vm = BuildLightVM(seedHash);
 
-    // 4) Store. A success goes to the LRU (at most ONE victim, destroyed outside the lock). A failure goes ONLY
-    //    to the negative cache: it does not evict healthy VMs nor lose the backoff when the LRU rotates.
+    // 4) Store. A success goes to the LRU (at most ONE victim, destroyed outside the lock). A failure goes ONLY to
+    //    the negative cache: it does not evict healthy VMs nor lose the backoff when the LRU rotates. [FIX_REVIEW round 2]
     std::shared_ptr<RandomXSlot> evicted;
     {
         std::lock_guard<std::mutex> lk(g_rx_mutex);
@@ -567,7 +569,7 @@ RandomXVMRef GetBrisviaVM(const uint256& seedHash)
             }
         } else {
             RandomXFailure& f = g_rx_failures[seedHash];
-            f.fail_count = std::min(f.fail_count + 1, 4); // saturate: the maximum backoff is already 5 min
+            f.fail_count = std::min(f.fail_count + 1, 4); // saturate: the max backoff is already 5 min
             f.retry_after = std::chrono::steady_clock::now() + BackoffFor(f.fail_count);
             if (g_rx_failures.size() > g_rx_failures_cap) g_rx_failures.clear(); // metadata: simple purge if it grows
         }
@@ -580,9 +582,9 @@ RandomXVMRef GetBrisviaVM(const uint256& seedHash)
 
 uint64_t BrisviaRandomXBuildCount() { return g_rx_build_count.load(std::memory_order_relaxed); }
 
-// LOWER helper: context ALREADY resolved (expectedBits + seedHash). Validates target range, nBits == expected
-// and RandomX. It does not look up ancestors nor compute height. Reusable by the normal chain and by the
-// headers sync with transient context.
+// LOWER helper (Phase 1): context ALREADY resolved (expectedBits + seedHash). Validates target range,
+// nBits == expected and RandomX. Does not look up ancestors nor compute height. Reusable by the normal chain and by
+// the headers sync with transient context.
 PoWCheckResult CheckRandomXHeaderWithResolvedContext(const CBlockHeader& block, uint32_t expectedBits,
                                                      const uint256& seedHash, const Consensus::Params& params,
                                                      uint256* outPowHash)
@@ -601,12 +603,12 @@ PoWCheckResult CheckRandomXHeaderWithResolvedContext(const CBlockHeader& block, 
         std::lock_guard<std::mutex> lk(vm->hashing_mutex);
         randomx_calculate_hash(vm->vm, in.data(), in.size(), rx);
     }
-    if (outPowHash) *outPowHash = RandomXOutputToUint256(rx); // pow_hash: real useful data even if it falls short
+    if (outPowHash) *outPowHash = RandomXOutputToUint256(rx); // pow_hash: real useful data even if it does not suffice
     return (RandomXOutputToTargetInteger(rx) <= *bnTarget) ? PoWCheckResult::VALID : PoWCheckResult::INVALID;
 }
 
-// Contextual verification of the work from the global index. Resolves the expected nBits (ASERT) and the seed,
-// and delegates to the lower helper. With checkRandomX=false it validates only nBits (without PoW).
+// Contextual work verification from the global index (Phase 1). Resolves the expected nBits (ASERT) and
+// the seed, and delegates to the lower helper. With checkRandomX=false it validates only nBits (no PoW).
 PoWCheckResult CheckContextualHeaderWork(const CBlockHeader& block, const CBlockIndex* pindexPrev, int nHeight,
                                          const Consensus::Params& params, bool checkRandomX, uint256* outPowHash)
 {
@@ -615,13 +617,13 @@ PoWCheckResult CheckContextualHeaderWork(const CBlockHeader& block, const CBlock
     // Only for chains with RandomX PoW. Without fPowRandomX it is a node misconfiguration -> INTERNAL_ERROR.
     if (!params.fPowRandomX) return PoWCheckResult::INTERNAL_ERROR;
 
-    // Context coherence. Inconsistent caller = LOCAL ERROR (not a malicious block): do not ban.
+    // Context consistency. Inconsistent caller = LOCAL ERROR (not a malicious block): do not ban.
     if (nHeight < 0) return PoWCheckResult::INTERNAL_ERROR;
     if (nHeight == 0 && pindexPrev != nullptr) return PoWCheckResult::INTERNAL_ERROR;
     if (nHeight > 0 && pindexPrev == nullptr) return PoWCheckResult::INTERNAL_ERROR;
     if (pindexPrev != nullptr && pindexPrev->nHeight + 1 != nHeight) return PoWCheckResult::INTERNAL_ERROR;
 
-    // Expected nBits: ASERT for every block > genesis; the genesis uses its own nBits (set by chainparams).
+    // Expected nBits: ASERT for every block > genesis; genesis uses its own nBits (set by chainparams).
     uint32_t expectedBits;
     if (nHeight > 0) {
         if (!params.asertAnchorParams.has_value()) return PoWCheckResult::INTERNAL_ERROR;
@@ -648,12 +650,11 @@ PoWCheckResult CheckRandomXProofOfWorkContextual(const CBlockHeader& block, cons
     return CheckContextualHeaderWork(block, pindexPrev, nHeight, params, /*checkRandomX=*/true, outPowHash);
 }
 
-// ===== Brisvia: PURE layer that verifies ONE header on a branch (parent ALREADY indexed). =====
-// Distinguishes the CAUSE of failure (parent / difficulty / mining / local error) for the future P2P (scoring
-// peers, logs, diagnostics). Isolated: does NOT touch net_processing / index / chainwork / HeadersSyncState.
-// Reuses GetNextWorkRequired (expected difficulty, receives the header in case it depends on nTime),
-// BrisviaGetSeedHash (BRANCH seed via the parent's ancestors) and the lower helper
-// CheckRandomXHeaderWithResolvedContext.
+// ===== Brisvia Phase 3A-1: PURE layer to verify ONE header on a branch (parent ALREADY indexed). =====
+// Distinguishes the CAUSE of the failure (parent / difficulty / mining / local error) for the future P2P (score peers,
+// logs, diagnostics). Isolated: does NOT touch net_processing / index / chainwork / HeadersSyncState. Reuses
+// GetNextWorkRequired (expected difficulty, takes the header in case it depends on nTime), BrisviaGetSeedHash
+// (seed of the BRANCH via the parent's ancestors) and the lower helper CheckRandomXHeaderWithResolvedContext.
 RandomXHeaderStatus CheckRandomXHeaderFromIndexedParent(const CBlockIndex* pindexPrev, const CBlockHeader& header,
                                                         const Consensus::Params& params, uint256* outPowHash)
 {
@@ -668,14 +669,14 @@ RandomXHeaderStatus CheckRandomXHeaderFromIndexedParent(const CBlockIndex* pinde
 
     const int nHeight = pindexPrev->nHeight + 1;
 
-    // Expected difficulty by ASERT. Requires the anchor; without it, it is misconfiguration -> local failure.
+    // Expected difficulty via ASERT. Requires the anchor; without it, it is a misconfiguration -> local failure.
     if (!params.asertAnchorParams.has_value()) return RandomXHeaderStatus::INTERNAL_ERROR;
     if (!DeriveTarget(header.nBits, params.powLimit)) return RandomXHeaderStatus::BAD_BITS; // nBits out of range
     const uint32_t expectedBits = GetNextWorkRequired(pindexPrev, &header, params);
-    if (header.nBits != expectedBits) return RandomXHeaderStatus::BAD_BITS;                 // incorrect difficulty
+    if (header.nBits != expectedBits) return RandomXHeaderStatus::BAD_BITS;                 // wrong difficulty
 
-    // BRANCH seed (ancestors of the indexed parent) + RandomX. We pass header.nBits as expected: we already
-    // validated it above, so the only INVALID the helper can return is that the RandomX hash does not meet it.
+    // Seed of the BRANCH (ancestors of the indexed parent) + RandomX. We pass header.nBits as expected: we
+    // already validated it above, so the only INVALID the helper can return is the RandomX hash not meeting it.
     const uint256 seedHash = BrisviaGetSeedHash(pindexPrev, nHeight, params);
     const PoWCheckResult rx = CheckRandomXHeaderWithResolvedContext(header, header.nBits, seedHash, params, outPowHash);
     switch (rx) {
@@ -686,8 +687,8 @@ RandomXHeaderStatus CheckRandomXHeaderFromIndexedParent(const CBlockIndex* pinde
     return RandomXHeaderStatus::INTERNAL_ERROR; // unreachable (exhaustive switch)
 }
 
-// ===== Brisvia: TRANSIENT branch context (parent not yet indexed) =====
-// Circular window capacity: the largest tip->seed distance occurs at the end of an epoch and equals
+// ===== Brisvia Phase 3A-2: TRANSIENT branch context (parent not yet indexed) =====
+// Circular window capacity: the largest tip->seed distance happens at the end of an epoch and equals
 // (BRISVIA_SEED_PERIOD + BRISVIA_SEED_DELAY - 2) = 2110; +1 to include both ends => 2111 is enough. We use
 // period+delay = 2112 (clean boundary, a single extra uint256). Fixed anti-DoS memory bound.
 static constexpr size_t kBrisviaBranchWindow = size_t(BRISVIA_SEED_PERIOD) + size_t(BRISVIA_SEED_DELAY);
@@ -707,9 +708,9 @@ RandomXHeaderBranchContext MakeRandomXHeaderBranchContext(const CBlockIndex* pin
     return ctx;
 }
 
-// Block id of the block at height h (h <= tip). In the indexed part it uses the ANCHOR's GetAncestor (correct
-// branch, never the active chain); in the transient part, the circular window. false if it is not resolvable
-// (out of window or out of range) -> the caller treats it as an internal context error, not the peer's fault.
+// Block id of the block at height h (h <= tip). In the indexed part it uses GetAncestor from the ANCHOR (correct
+// branch, never the active chain); in the transient part, the circular window. false if it is not resolvable (out of
+// window or range) -> the caller treats it as an internal context error, not as the peer's fault.
 static bool BranchBlockIdAtHeight(const RandomXHeaderBranchContext& ctx, int64_t h, uint256& out)
 {
     if (ctx.pindexAnchor == nullptr) return false;
@@ -721,8 +722,8 @@ static bool BranchBlockIdAtHeight(const RandomXHeaderBranchContext& ctx, int64_t
         out = p->GetBlockHash();
         return true;
     }
-    // Transient part: live range [ringFirstHeight, ringFirstHeight + ringCount - 1]. If h fell below it, it was
-    // dropped from the window (should not happen with a contiguous branch and a 2112 window, but it is reported explicitly).
+    // Transient part: live range [ringFirstHeight, ringFirstHeight + ringCount - 1]. If h fell below it,
+    // it was dropped from the window (should not happen with a contiguous branch and window 2112, but it is reported explicitly).
     if (h < ctx.ringFirstHeight) return false;
     const int64_t offset = h - ctx.ringFirstHeight;
     if (offset < 0 || size_t(offset) >= ctx.ringCount) return false;
@@ -747,7 +748,7 @@ BranchResolveStatus ResolveRandomXBranchContext(const RandomXHeaderBranchContext
     if (!DeriveTarget(header.nBits, params.powLimit)) return BranchResolveStatus::BAD_BITS; // out of range
     uint32_t expectedBits;
     if (params.fPowNoRetargeting) {
-        expectedBits = ctx.tipBits;   // constant difficulty (regtest): same as the tip's nBits
+        expectedBits = ctx.tipBits;   // constant difficulty (regtest): equal to the tip's nBits
     } else {
         if (!params.asertAnchorParams.has_value()) return BranchResolveStatus::BAD_CONTEXT;
         expectedBits = GetNextASERTWorkRequiredFromValues(ctx.tipHeight, ctx.tipTime, &header, params);

@@ -674,16 +674,16 @@ private:
     bool IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfrom,
             std::vector<CBlockHeader>& headers)
         EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex, g_msgproc_mutex);
-    /** Brisvia: common handling of a headers-sync ProcessingResult (getheaders for request_more, transition to
-     * FINAL, presync statistics and swapping the ready headers into `headers`). Extracted from
-     * IsContinuationOfLowWorkHeadersSync so it can be shared with the per-quantum draining. */
+    /** Brisvia: common handling of a headers-sync ProcessingResult (getheaders from request_more, transition to
+     * FINAL, presync statistics and swap of the ready headers into `headers`). Extracted from
+     * IsContinuationOfLowWorkHeadersSync to be shared with the per-quantum draining. */
     void HandleHeadersSyncResult(Peer& peer, CNode& pfrom,
             HeadersSyncState::ProcessingResult& result, std::vector<CBlockHeader>& headers)
         EXCLUSIVE_LOCKS_REQUIRED(peer.m_headers_sync_mutex, !m_headers_presync_mutex, g_msgproc_mutex);
-    /** Brisvia: processes ONE quantum of this peer's pending headers-sync (RandomX verification bounded by the
-     * budget), accepts into the index the headers that became ready, and punishes the peer ONLY if the sync
-     * aborted due to a hostile RandomX PoW (never due to an internal node error). Returns true if there was
-     * pending work, so the caller yields the thread (fMoreWork). Only applies with fPowRandomX. */
+    /** Brisvia: processes ONE quantum of this peer's pending headers-sync (RandomX verification bounded by
+     * budget), accepts into the index the headers that have become ready, and penalizes the peer ONLY if the sync
+     * aborted due to a hostile RandomX PoW (never due to an internal node error). Returns true if there was pending
+     * work, so the caller yields the thread (fMoreWork). Only applies with fPowRandomX. */
     bool DrainPendingHeadersQuantum(CNode& pfrom, Peer& peer)
         EXCLUSIVE_LOCKS_REQUIRED(!peer.m_headers_sync_mutex, !m_headers_presync_mutex, g_msgproc_mutex);
     /** Check work on a headers chain to be processed, and if insufficient,
@@ -2494,9 +2494,9 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, Peer& peer, const CBlo
 bool PeerManagerImpl::CheckHeadersPoW(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams, Peer& peer)
 {
     // Do these headers have proof-of-work matching what's claimed?
-    // Brisvia: the real PoW is RandomX (expensive) and is validated later in HeadersSyncState (low-work path) and
-    // in AcceptBlockHeader->ContextualCheckBlockHeader (normal path), ALWAYS before crediting chainwork or creating
-    // the index. Here just a cheap nBits filter; running RandomX over the batch would be a DoS. Bitcoin keeps the
+    // Brisvia: the real PoW is RandomX (expensive) and is validated later in HeadersSyncState (low-work path) and in
+    // AcceptBlockHeader->ContextualCheckBlockHeader (normal path), ALWAYS before crediting chainwork or creating the
+    // index. Here just a cheap nBits filter; running RandomX over the batch would be a DoS. Bitcoin keeps the
     // exact SHA256d check.
     const bool pow_ok = consensusParams.fPowRandomX ? HasSaneHeaderTargets(headers, consensusParams)
                                                     : HasValidProofOfWork(headers, consensusParams);
@@ -2652,9 +2652,9 @@ bool PeerManagerImpl::IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfro
 
 bool PeerManagerImpl::DrainPendingHeadersQuantum(CNode& pfrom, Peer& peer)
 {
-    // Brisvia: processes ONE quantum of the already-received headers message whose RandomX work was left half done
-    // by the budget. It does NOT request anything new from the peer (request_more does that once the message is
-    // drained). It yields the thread between quanta so it does not hold g_msgproc_mutex over ~2000 RandomX at once.
+    // Brisvia: processes ONE quantum of the already-received headers message whose RandomX work was left halfway by
+    // the budget. Does NOT request anything new from the peer (request_more does that when the message is exhausted).
+    // Yields the thread between quanta so as not to block g_msgproc_mutex validating ~2000 RandomX in one shot.
     std::vector<CBlockHeader> headers;
     std::optional<RandomXHeaderStatus> reject_status;
     bool had_work = false;
@@ -2668,8 +2668,8 @@ bool PeerManagerImpl::DrainPendingHeadersQuantum(CNode& pfrom, Peer& peer)
         if (!result.success) reject_status = result.status;
     }
 
-    // Deferred punishment: only if the sync aborted due to a hostile RandomX PoW. NEVER due to INTERNAL_ERROR
-    // (local node failure) nor other causes (discontinuity, etc. -> upstream's no-ban behaviour is preserved).
+    // Deferred penalty: only if the sync aborted due to a hostile RandomX PoW. NEVER due to INTERNAL_ERROR (local
+    // node failure) nor other causes (discontinuity, etc. -> the upstream no-ban is preserved).
     if (reject_status.has_value()) {
         switch (*reject_status) {
         case RandomXHeaderStatus::BAD_RANDOMX_POW:
@@ -2678,7 +2678,7 @@ bool PeerManagerImpl::DrainPendingHeadersQuantum(CNode& pfrom, Peer& peer)
             Misbehaving(peer, "brisvia-randomx-headers");
             break;
         default:
-            break; // INTERNAL_ERROR / VALID: do not punish
+            break; // INTERNAL_ERROR / VALID: do not penalize
         }
     }
 
@@ -2696,8 +2696,8 @@ bool PeerManagerImpl::DrainPendingHeadersQuantum(CNode& pfrom, Peer& peer)
         }
         if (pindexLast) {
             if (processed && received_new_header) LogBlockHeader(*pindexLast, pfrom, /*via_compact_block=*/false);
-            // may_have_more_headers=true: we are still mid-sync; requesting more headers is governed by
-            // HeadersSyncState's own request_more (via HandleHeadersSyncResult), not this UpdatePeerState.
+            // may_have_more_headers=true: we are still mid-sync; the request for more headers is governed by the
+            // request_more of HeadersSyncState itself (via HandleHeadersSyncResult), not this UpdatePeerState.
             UpdatePeerStateForReceivedHeaders(pfrom, peer, *pindexLast, received_new_header, /*may_have_more_headers=*/true);
             HeadersDirectFetchBlocks(pfrom, peer, *pindexLast);
         }
@@ -5080,10 +5080,10 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
     // Don't bother if send buffer is too full to respond anyway
     if (pfrom->fPauseSend) return false;
 
-    // Brisvia: if this peer has a headers-sync with pending internal work (RandomX verification cut off by the
-    // budget), process ONE quantum and yield the thread (fMoreWork) BEFORE taking a new message. This way we do
-    // not hold g_msgproc_mutex validating ~2000 RandomX at once, and we do not queue the peer's next batch until
-    // the current one is drained. Gated by fPowRandomX: in Bitcoin the sync lock is not even taken (zero change).
+    // Brisvia: if this peer has a headers-sync with pending internal work (RandomX verification cut short by
+    // budget), process ONE quantum and yield the thread (fMoreWork) BEFORE taking a new message. This way we do not
+    // block g_msgproc_mutex validating ~2000 RandomX in one shot, and we do not accumulate the peer's next batch
+    // until the current one is drained. Gated by fPowRandomX: in Bitcoin the sync lock is not even taken (zero change).
     if (m_chainparams.GetConsensus().fPowRandomX) {
         if (DrainPendingHeadersQuantum(*pfrom, *peer)) return true;
     }
@@ -5130,8 +5130,8 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
         LogDebug(BCLog::NET, "%s(%s, %u bytes): Unknown exception caught\n", __func__, SanitizeString(msg.m_type), msg.m_message_size);
     }
 
-    // Brisvia: if the message just processed (e.g. a large HEADERS) left pending headers-sync work, ask to be
-    // re-invoked right away to drain the next quantum (see DrainPendingHeadersQuantum above).
+    // Brisvia: if the just-processed message (e.g. a large HEADERS) left pending headers-sync work,
+    // request to be re-invoked right away to drain the next quantum (see DrainPendingHeadersQuantum above).
     if (m_chainparams.GetConsensus().fPowRandomX) {
         LOCK(peer->m_headers_sync_mutex);
         if (peer->m_headers_sync && peer->m_headers_sync->HasPendingHeaders()) fMoreWork = true;

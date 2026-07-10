@@ -87,7 +87,7 @@ public:
     /** Default value for -checkmempool and -checkblockindex argument */
     bool DefaultConsistencyChecks() const { return fDefaultConsistencyChecks; }
     /** If this chain is exclusively used for testing */
-    bool IsTestChain() const { return m_chain_type != ChainType::MAIN; }
+    bool IsTestChain() const { return m_chain_type != ChainType::MAIN && m_chain_type != ChainType::BRISVIA_MAIN; }
     /** If this chain allows time to be mocked */
     bool IsMockableChain() const { return m_is_mockable_chain; }
     uint64_t PruneAfterHeight() const { return nPruneAfterHeight; }
@@ -148,10 +148,10 @@ public:
 
     /**
      * TestNetOptions holds configurations for creating a testnet CChainParams.
-     * Brisvia: enables the network's own testnet (RandomX PoW + emission + ASERT + separate network identity).
+     * Brisvia: enables the dedicated testnet (RandomX PoW + emission + ASERT + separate network identity).
      */
     struct TestNetOptions {
-        bool brisvia_pow{false}; //!< Brisvia: own testnet (off = Bitcoin testnet, untouched)
+        bool brisvia_pow{false}; //!< Brisvia: dedicated testnet (off = Bitcoin testnet, untouched)
     };
 
     static std::unique_ptr<const CChainParams> RegTest(const RegTestOptions& options);
@@ -161,6 +161,7 @@ public:
     static std::unique_ptr<const CChainParams> TestNet(const TestNetOptions& options);
     static std::unique_ptr<const CChainParams> TestNet4();
     static std::unique_ptr<const CChainParams> BrisviaTestNet(); //!< Brisvia: canonical test network (own identity)
+    static std::unique_ptr<const CChainParams> BrisviaMain(); //!< Brisvia: MAIN network (mainnet), own identity
 
 protected:
     CChainParams() = default;

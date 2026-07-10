@@ -43,7 +43,7 @@ void ReadSigNetArgs(const ArgsManager& args, CChainParams::SigNetOptions& option
 
 void ReadTestNetArgs(const ArgsManager& args, CChainParams::TestNetOptions& options)
 {
-    // Brisvia: -brisviapow enables the network's own testnet (RandomX PoW + emission + ASERT). Without the flag, Bitcoin testnet.
+    // Brisvia: -brisviapow enables the dedicated testnet (RandomX PoW + emission + ASERT). Without the flag, Bitcoin testnet.
     if (auto value = args.GetBoolArg("-brisviapow")) options.brisvia_pow = *value;
 }
 
@@ -145,6 +145,8 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
     }
     case ChainType::BRISVIA_TESTNET:
         return CChainParams::BrisviaTestNet();
+    case ChainType::BRISVIA_MAIN:
+        return CChainParams::BrisviaMain();
     }
     assert(false);
 }

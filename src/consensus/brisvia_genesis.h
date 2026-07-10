@@ -1,4 +1,4 @@
-// Brisvia — genesis block builder. Shared by chainparams.cpp and the tests (same byte-for-byte construction,
+// Brisvia - genesis block builder. Shared by chainparams.cpp and the tests (same byte-for-byte construction,
 // so the mined nNonce always reproduces).
 //
 // Coinbase: the phrase in the scriptSig (Bitcoin style: two pushes + text); one 0-value output with

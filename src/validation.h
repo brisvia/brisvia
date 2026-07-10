@@ -412,9 +412,9 @@ BlockValidationState TestBlockValidity(
 /** Check with the proof of work on each blockheader matches the value in nBits */
 bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams);
 
-/** Brisvia: filtro preliminar BARATO para cadenas RandomX. Solo comprueba que nBits sea decodificable y este en
- * rango; NO verifica el PoW RandomX (caro; se valida en HeadersSyncState y en AcceptBlockHeader). Nombre honesto:
- * a diferencia de HasValidProofOfWork, NO afirma que el trabajo haya sido comprobado. */
+/** Brisvia: CHEAP preliminary filter for RandomX chains. It only checks that nBits is decodable and within
+ * range; it does NOT verify the RandomX PoW (expensive; validated in HeadersSyncState and in AcceptBlockHeader). Honest name:
+ * unlike HasValidProofOfWork, it does NOT claim that the work has been checked. */
 bool HasSaneHeaderTargets(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams);
 
 /** Check if a block has been mutated (with respect to its merkle root and witness commitments). */

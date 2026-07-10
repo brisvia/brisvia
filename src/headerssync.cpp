@@ -89,10 +89,10 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
     if (m_download_state == State::FINAL) return ret;
 
     // Brisvia: RandomX work budget. The batch is stored and processed in bounded quanta (drained with
-    // ContinuePendingHeaders). The "end of message" logic runs ONLY when the last header of the message is
-    // consumed, to preserve upstream's semantics. Bitcoin (without RandomX) processes the whole batch below, intact.
+    // ContinuePendingHeaders). The "end of message" logic runs ONLY when consuming the last header of the message,
+    // to preserve upstream semantics. Bitcoin (without RandomX) processes the whole batch below, untouched.
     if (m_consensus_params.fPowRandomX) {
-        Assume(!HasPendingHeaders()); // invariant: a single pending message per sync
+        Assume(!HasPendingHeaders()); // invariant: only one pending message per sync
         m_pending_headers = received_headers;
         m_pending_pos = 0;
         m_pending_full_headers_message = full_headers_message;
@@ -159,9 +159,9 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
     return ret;
 }
 
-// Brisvia: maximum RandomX headers to validate per quantum (per ProcessPendingQuantum call). A hard bound on the
-// CPU cost per turn of the message thread: with RandomX each header costs ~10-30 ms, so 32 bounds the thread
-// blocking. The rest of the message is drained with ContinuePendingHeaders(), yielding control between turns.
+// Brisvia: maximum number of RandomX headers to validate per quantum (per ProcessPendingQuantum call). Hard bound
+// on the CPU cost per iteration of the message thread: with RandomX each header costs ~10-30 ms, so 32 bounds the
+// thread stall. The rest of the message is drained with ContinuePendingHeaders(), yielding control between iterations.
 static constexpr size_t BRISVIA_MAX_RANDOMX_PER_QUANTUM = 32;
 
 HeadersSyncState::ProcessingResult HeadersSyncState::ContinuePendingHeaders()
@@ -175,8 +175,8 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ContinuePendingHeaders()
 }
 
 // Processes the NEXT quantum of the pending message (from m_pending_pos). The "end of message" logic
-// (PRESYNC->REDOWNLOAD transition, request_more, releasing pow_validated_headers) runs ONLY when the last
-// header of the message is consumed, exactly like upstream's full-batch path. Brisvia only (fPowRandomX).
+// (PRESYNC->REDOWNLOAD transition, request_more, releasing pow_validated_headers) runs ONLY when consuming the last
+// header of the message, exactly like upstream's full-batch path. Brisvia only (fPowRandomX).
 HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
 {
     ProcessingResult ret;
@@ -190,7 +190,7 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
                                    ? m_pending_pos + BRISVIA_MAX_RANDOMX_PER_QUANTUM : total;
 
     if (m_download_state == State::PRESYNC) {
-        // Continuity of the FIRST header of the message against the last received (only at the start of the message).
+        // Continuity of the FIRST header of the message against the last received one (only at the start of the message).
         if (m_pending_pos == 0 && m_pending_headers[0].hashPrevBlock != m_last_header_received.GetHash()) {
             LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: non-continuous headers at height=%i (presync phase)\n", m_id, m_current_height);
             m_pending_headers.clear(); m_pending_pos = 0;
@@ -208,9 +208,9 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
         ret.success = true;
         if (m_pending_pos < total) {
             ret.more_internal_work = true; // headers of the message remain: continue with ContinuePendingHeaders()
-            return ret;                    // NOT end-of-message, do NOT Finalize
+            return ret;                    // NOT end-of-message, NO Finalize
         }
-        // Message EXHAUSTED -> end-of-message logic (same as upstream's full batch).
+        // Message EXHAUSTED -> end of message logic (same as upstream's full batch).
         MaybeTransitionToRedownload();
         if (m_pending_full_headers_message || m_download_state == State::REDOWNLOAD) {
             ret.request_more = true;
@@ -231,7 +231,7 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
             ret.more_internal_work = true;
             return ret;
         }
-        // Message EXHAUSTED -> redownload end of message.
+        // Message EXHAUSTED -> end of redownload message.
         ret.pow_validated_headers = PopHeadersReadyForAcceptance();
         if (m_redownloaded_headers.empty() && m_process_all_remaining_headers) {
             LogDebug(BCLog::NET, "Initial headers sync complete with peer=%d: releasing all at height=%i (redownload phase)\n", m_id, m_redownload_buffer_last_height);
@@ -287,9 +287,9 @@ void HeadersSyncState::MaybeTransitionToRedownload()
         m_redownload_buffer_first_prev_hash = m_chain_start->GetBlockHash();
         m_redownload_buffer_last_hash = m_chain_start->GetBlockHash();
         m_redownload_chain_work = m_chain_start->nChainWork;
-        // Brisvia: redownload does NOT continue from the tip reached in presync, it re-walks the branch from the
-        // anchor. Reset the transient context here, together with the rest of the redownload state and BEFORE
-        // publishing State::REDOWNLOAD, so the object stays coherent with the new phase.
+        // Brisvia: redownload does NOT continue from the tip reached in presync, but re-walks the branch from
+        // the anchor. Reset the transient context here, together with the rest of the redownload state and BEFORE
+        // publishing State::REDOWNLOAD, so the object stays consistent with the new phase.
         if (m_consensus_params.fPowRandomX) {
             m_randomx_branch_context = MakeRandomXHeaderBranchContext(m_chain_start);
         }
@@ -344,11 +344,11 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
 
 bool HeadersSyncState::BrisviaCheckHeaderRandomX(const CBlockHeader& header)
 {
-    // Normal Bitcoin chain (no RandomX): no behaviour changes.
+    // Normal Bitcoin chain (no RandomX): no behavior changes.
     if (!m_consensus_params.fPowRandomX) return true;
 
-    // The context must exist whenever fPowRandomX (created by the constructor and the redownload transition). If
-    // it is missing, it is a node initialization error: abort the sync instead of silently dereferencing.
+    // The context must exist whenever fPowRandomX (created by the constructor and the transition to redownload). If
+    // it is missing, it is an initialization error of the node itself: abort the sync instead of silently dereferencing.
     Assume(m_randomx_branch_context.has_value());
     if (!m_randomx_branch_context.has_value()) {
         LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: RandomX branch context missing\n", m_id);
@@ -358,9 +358,9 @@ bool HeadersSyncState::BrisviaCheckHeaderRandomX(const CBlockHeader& header)
     const int64_t next_height = m_randomx_branch_context->tipHeight + 1;
     const RandomXHeaderStatus st = CheckAndAdvanceRandomXHeader(*m_randomx_branch_context, header, m_consensus_params);
     if (st != RandomXHeaderStatus::VALID) {
-        // BAD_PREV_BLOCK / BAD_BITS / BAD_RANDOMX_POW = hostile data from the peer; INTERNAL_ERROR = local node
-        // failure. Both abort this sync. We store the cause in m_last_randomx_reject so the network wiring
-        // punishes ONLY the hostile peer (never on INTERNAL_ERROR). The context did NOT advance (CheckAndAdvance
+        // BAD_PREV_BLOCK / BAD_BITS / BAD_RANDOMX_POW = hostile data from the peer; INTERNAL_ERROR = local failure of
+        // the node. Both abort this sync. We store the cause in m_last_randomx_reject so the network wiring
+        // (F3B) penalizes ONLY the hostile peer (never for INTERNAL_ERROR). The context did NOT advance (CheckAndAdvance
         // only commits if VALID).
         m_last_randomx_reject = st;
         LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: RandomX header rejected (status=%d) at height=%i\n",
@@ -398,8 +398,8 @@ bool HeadersSyncState::ValidateAndStoreRedownloadedHeader(const CBlockHeader& he
         return false;
     }
 
-    // Brisvia: validate the RandomX PoW (and advance the context) BEFORE crediting redownload work. Same hard
-    // property as in presync: no header adds work without a VALID RandomX.
+    // Brisvia: validate the RandomX PoW (and advance the context) BEFORE crediting redownload work. Same
+    // hard property as in presync: no header adds work without a VALID RandomX.
     if (!BrisviaCheckHeaderRandomX(header)) {
         return false;
     }

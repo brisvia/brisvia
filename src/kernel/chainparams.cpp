@@ -294,10 +294,10 @@ public:
         };
 
         if (opts.brisvia_pow) {
-            // ===== Brisvia TESTNET: OWN network (RandomX PoW + emission + ASERT) with a network identity separate from
-            // Bitcoin testnet and regtest. Unlike regtest (frozen difficulty), here ASERT
-            // truly retargets (fPowNoRetargeting=false). Enabled with -brisviapow; with brisvia_pow=false the
-            // Bitcoin testnet stays untouched. =====
+            // ===== Brisvia TESTNET: own network (PoW RandomX + emission + ASERT) with a network identity separate from
+            // Bitcoin testnet and from regtest. Unlike regtest (frozen difficulty), here ASERT
+            // retargets for real (fPowNoRetargeting=false). Enabled with -brisviapow; with brisvia_pow=false the
+            // Bitcoin testnet stays intact. =====
             consensus.fPowRandomX = true;
             consensus.nPowTargetSpacing = 120;                 // provisional: fast blocks for testing
             consensus.nSubsidyHalvingInterval = 210000;        // mainnet-like scheme (emission governed by Brisvia)
@@ -307,10 +307,10 @@ public:
             consensus.nASERTHalfLife = 21600;                  // 6 h
             consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff)
             consensus.fPowNoRetargeting = false;               // ASERT ACTIVE: real difficulty (the key difference vs regtest)
-            consensus.fPowAllowMinDifficultyBlocks = false;    // without the min-difficulty exception of Bitcoin testnet
+            consensus.fPowAllowMinDifficultyBlocks = false;    // without the Bitcoin testnet min-difficulty exception
             consensus.brisviaInitialSeed = uint256{"5454545454545454545454545454545454545454545454545454545454545454"};
 
-            // OWN network identity so no Bitcoin testnet node crosses over: own magic + port.
+            // Own network identity so no Bitcoin testnet node crosses over: own magic + port.
             pchMessageStart[0] = 0x42; // 'B'
             pchMessageStart[1] = 0x52; // 'R'
             pchMessageStart[2] = 0x54; // 'T'
@@ -338,7 +338,7 @@ public:
             m_assumeutxo_data = {};        // no snapshots (own chain, starts from scratch)
             chainTxData = ChainTxData{0, 0, 0.001};
 
-            bech32_hrp = "tbrv"; // Brisvia testnet's own prefix (addresses are not confused with real ones)
+            bech32_hrp = "tbrv"; // Brisvia testnet own prefix (addresses are not confused with the real ones)
         }
     }
 };
@@ -637,14 +637,14 @@ public:
         }
 
         if (opts.brisvia_pow) {
-            // ===== Brisvia regtest: real RandomX PoW + own emission + ASERT, with an easy target (near-instant
-            // mining). Enabled via option; with brisvia_pow=false the Bitcoin regtest stays untouched. =====
+            // ===== Brisvia regtest: real RandomX PoW + own emission + ASERT, with an easy target (almost
+            // instant mining). Enabled via option; with brisvia_pow=false the Bitcoin regtest stays intact. =====
             consensus.fPowRandomX = true;
             consensus.nPowTargetSpacing = 120;
-            consensus.nSubsidyHalvingInterval = 150; // small regtest
+            consensus.nSubsidyHalvingInterval = 150; // regtest chico
             consensus.nBrisviaInitialSubsidy = 25 * COIN;
             consensus.nBrisviaTailSubsidy = 1 * COIN;
-            consensus.fBrisviaSubsidy = true; // explicit selector of the emission regime
+            consensus.fBrisviaSubsidy = true; // explicit selector of the emission regime [FIX_REVIEW Phase 2]
             consensus.nASERTHalfLife = 21600;
             consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff)
             consensus.brisviaInitialSeed = uint256{"4242424242424242424242424242424242424242424242424242424242424242"};
@@ -658,7 +658,7 @@ public:
             consensus.hashGenesisBlock = genesis.GetHash();
             consensus.asertAnchorParams = Consensus::Params::ASERTAnchor{
                 /*nHeight=*/0, /*nBits=*/genesisBits, /*nPrevBlockTime=*/int64_t(genesisTime) - consensus.nPowTargetSpacing};
-            // The block's ID (SHA256d) does NOT meet the target; the one that meets it is RandomX. Frozen values:
+            // The block ID (SHA256d) does NOT meet the target; the one that meets it is RandomX. Frozen values:
             assert(consensus.hashGenesisBlock == uint256{"38bfbc99c2f734111485d6a1ad4650e89b51759ebb8ae5299abaf42cc1f6cdc2"});
             assert(genesis.hashMerkleRoot == uint256{"7a0e51313ff1263e13262540463f531f41d4215c75f2ccfab091a387a5837325"});
         } else {
@@ -710,14 +710,14 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
-        bech32_hrp = opts.brisvia_pow ? "brvrt" : "bcrt"; // different prefix per network (avoids sending real funds in tests)
+        bech32_hrp = opts.brisvia_pow ? "brvrt" : "bcrt"; // different prefix per network (avoids sending real funds during tests)
     }
 };
 
 /**
- * CANONICAL Brisvia testnet (ChainType::BRISVIA_TESTNET): own test network with an identity fully separate from
- * Bitcoin (own magic, port, datadir, RPC and prefix). RandomX PoW + Brisvia emission (25 -> tail 1) + ASERT
- * active. Genesis with a real launch date and a calibrated initial difficulty.
+ * Brisvia CANONICAL testnet (ChainType::BRISVIA_TESTNET): own test network with an identity fully separate from
+ * Bitcoin (own magic, port, datadir, RPC and prefix). PoW RandomX + Brisvia emission (25 -> tail 1) + ASERT
+ * active. Genesis with a real launch date and calibrated initial difficulty.
  * Selected with -chain=brisvia-test.
  */
 class CBrisviaTestNetParams : public CChainParams {
@@ -730,10 +730,10 @@ public:
         // Brisvia emission (not Bitcoin's): 25 BRVA -> perpetual tail 1 BRVA.
         consensus.nSubsidyHalvingInterval = 1000000;
         consensus.nBrisviaInitialSubsidy = 50 * COIN;
-        consensus.nBrisviaTailSubsidy = 0; // no tail: finite Bitcoin-like emission, 100M total
+        consensus.nBrisviaTailSubsidy = 0; // no tail: finite emission Bitcoin-style, 100M total
         consensus.fBrisviaSubsidy = true;
 
-        // Brand-new network with no history: modern rules active from the start.
+        // New network with no history: modern rules active from the start.
         consensus.script_flag_exceptions.clear();
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256{};
@@ -743,14 +743,14 @@ public:
         consensus.SegwitHeight = 0;
         consensus.MinBIP9WarningHeight = 0;
 
-        // RandomX PoW + ASERT difficulty (real retargeting).
+        // PoW RandomX + difficulty via ASERT (real retargeting).
         consensus.fPowRandomX = true;
         consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff): difficulty floor
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60;
         consensus.nPowTargetSpacing = 120;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
-        consensus.fPowNoRetargeting = false;   // ASERT truly adjusts the difficulty
+        consensus.fPowNoRetargeting = false;   // ASERT adjusts difficulty for real
         consensus.nASERTHalfLife = 21600;      // 6 h
         consensus.brisviaInitialSeed = uint256{"5454545454545454545454545454545454545454545454545454545454545454"};
 
@@ -770,7 +770,7 @@ public:
         consensus.nMinimumChainWork = uint256{"000000000000000000000000000000000000000000000000000000000070bd47"}; // burying block 266 of the initial testnet chain
         consensus.defaultAssumeValid = uint256{};
 
-        // OWN network identity (magic BRT1, own port).
+        // Own network identity (magic BRT1, own port).
         pchMessageStart[0] = 0x42; // 'B'
         pchMessageStart[1] = 0x52; // 'R'
         pchMessageStart[2] = 0x54; // 'T'
@@ -780,7 +780,7 @@ public:
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
 
-        // CANONICAL genesis: real launch date + calibrated nBits (ASERT anchor). Values from the test
+        // CANONICAL genesis: real launch date + calibrated nBits (ASERT anchor). Values from test
         // mine_brisvia_testnet_genesis.
         unsigned char anchor[32]; std::memset(anchor, 0xB2, sizeof(anchor));
         const uint32_t genesisTime = 1783382400, genesisNonce = 25314, genesisBits = 0x1e7fffff;
@@ -794,7 +794,7 @@ public:
 
         vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_brisvia_test), std::end(chainparams_seed_brisvia_test));
         vSeeds.clear();
-        vSeeds.emplace_back("seed.testnet.brisvia.com."); // DNS seed: A record -> public VPS node
+        vSeeds.emplace_back("seed.testnet.brisvia.com."); // DNS seed: A record -> public node on the VPS
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
@@ -802,7 +802,106 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
-        bech32_hrp = "tbrv"; // Brisvia testnet's own prefix
+        bech32_hrp = "tbrv"; // Brisvia testnet own prefix
+
+        fDefaultConsistencyChecks = false;
+        m_is_mockable_chain = false;
+        m_assumeutxo_data = {};
+        chainTxData = ChainTxData{0, 0, 0.001};
+    }
+};
+
+/**
+ * Brisvia MAINNET (ChainType::BRISVIA_MAIN): the MAIN Brisvia network (real money). Fully own network identity,
+ * separate from Bitcoin and from the Brisvia testnet (magic BRV1, port 9333, own datadir/RPC and
+ * own bech32 "brv" prefix). PoW RandomX + finite Bitcoin-style emission (50 BRVA/block, halving every
+ * 1,000,000 blocks, no tail, 100M cap) + ASERT. Selected with -chain=brisvia.
+ */
+class CBrisviaMainParams : public CChainParams {
+public:
+    CBrisviaMainParams() {
+        m_chain_type = ChainType::BRISVIA_MAIN;
+        consensus.signet_blocks = false;
+        consensus.signet_challenge.clear();
+
+        // Brisvia emission: 50 BRVA -> halving every 1,000,000 -> no tail (finite, 100M cap like Bitcoin).
+        consensus.nSubsidyHalvingInterval = 1000000;
+        consensus.nBrisviaInitialSubsidy = 50 * COIN;
+        consensus.nBrisviaTailSubsidy = 0;
+        consensus.fBrisviaSubsidy = true;
+
+        // New network with no history: modern rules active from the start.
+        consensus.script_flag_exceptions.clear();
+        consensus.BIP34Height = 1;
+        consensus.BIP34Hash = uint256{};
+        consensus.BIP65Height = 1;
+        consensus.BIP66Height = 1;
+        consensus.CSVHeight = 1;
+        consensus.SegwitHeight = 0;
+        consensus.MinBIP9WarningHeight = 0;
+
+        // PoW RandomX + difficulty via ASERT (real retargeting).
+        consensus.fPowRandomX = true;
+        consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff): difficulty floor
+        consensus.nPowTargetTimespan = 14 * 24 * 60 * 60;
+        consensus.nPowTargetSpacing = 120;
+        consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.enforce_BIP94 = false;
+        consensus.fPowNoRetargeting = false;   // ASERT adjusts difficulty for real
+        consensus.nASERTHalfLife = 21600;      // 6 h
+        consensus.brisviaInitialSeed = uint256{"5454545454545454545454545454545454545454545454545454545454545454"};
+
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].threshold = 108;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].period = 144;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].threshold = 108;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].period = 144;
+
+        // New chain: starts at 0 (no minimum accumulated work or assumed checkpoint).
+        consensus.nMinimumChainWork = uint256{};
+        consensus.defaultAssumeValid = uint256{};
+
+        // Own network identity: magic BRV1, port 9333.
+        pchMessageStart[0] = 0x42; // 'B'
+        pchMessageStart[1] = 0x52; // 'R'
+        pchMessageStart[2] = 0x56; // 'V'
+        pchMessageStart[3] = 0x31; // '1'  ->  "BRV1" (does not collide with Bitcoin nor with the Brisvia testnet "BRT1")
+        nDefaultPort = 9333;
+        nPruneAfterHeight = 100000;
+        m_assumed_blockchain_size = 0;
+        m_assumed_chain_state_size = 0;
+
+        // CANONICAL mainnet genesis: real launch date (Aug 1 2026 12:00 ART) + English phrase (fair launch) +
+        // ASERT anchor nBits. Values from test mine_brisvia_mainnet_genesis.
+        unsigned char anchor[32]; std::memset(anchor, 0xB3, sizeof(anchor)); // mainnet's own anchor (the testnet uses 0xB2)
+        const uint32_t genesisTime = 1785596400, genesisNonce = 90424, genesisBits = 0x1e7fffff;
+        genesis = CreateBrisviaGenesisBlock("No privilege at genesis: an open network, mined and sustained by the people.", anchor,
+                                            genesisTime, genesisNonce, genesisBits, 1);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        consensus.asertAnchorParams = Consensus::Params::ASERTAnchor{
+            /*nHeight=*/0, /*nBits=*/genesisBits, /*nPrevBlockTime=*/int64_t(genesisTime) - consensus.nPowTargetSpacing};
+        assert(consensus.hashGenesisBlock == uint256{"7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff"});
+        assert(genesis.hashMerkleRoot == uint256{"c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d"});
+
+        // Isolated rehearsal: no fixed seeds or DNS seed (generated/published before the public launch on Aug 1).
+        vFixedSeeds.clear();
+        vSeeds.clear();
+
+        // mainnet's own base58 prefixes (different from testnet 111/196/239). Primary format is bech32 "brv".
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,25);
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,85);
+        base58Prefixes[SECRET_KEY]     = std::vector<unsigned char>(1,153);
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
+
+        bech32_hrp = "brv"; // Brisvia mainnet own prefix (brv1... addresses)
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
@@ -819,6 +918,11 @@ std::unique_ptr<const CChainParams> CChainParams::SigNet(const SigNetOptions& op
 std::unique_ptr<const CChainParams> CChainParams::BrisviaTestNet()
 {
     return std::make_unique<const CBrisviaTestNetParams>();
+}
+
+std::unique_ptr<const CChainParams> CChainParams::BrisviaMain()
+{
+    return std::make_unique<const CBrisviaMainParams>();
 }
 
 std::unique_ptr<const CChainParams> CChainParams::RegTest(const RegTestOptions& options)
@@ -865,6 +969,7 @@ std::optional<ChainType> GetNetworkForMagic(const MessageStartChars& message)
     const auto regtest_msg = CChainParams::RegTest({})->MessageStart();
     const auto signet_msg = CChainParams::SigNet({})->MessageStart();
     const auto brisvia_msg = CChainParams::BrisviaTestNet()->MessageStart();
+    const auto brisvia_main_msg = CChainParams::BrisviaMain()->MessageStart();
 
     if (std::ranges::equal(message, mainnet_msg)) {
         return ChainType::MAIN;
@@ -878,6 +983,8 @@ std::optional<ChainType> GetNetworkForMagic(const MessageStartChars& message)
         return ChainType::SIGNET;
     } else if (std::ranges::equal(message, brisvia_msg)) {
         return ChainType::BRISVIA_TESTNET;
+    } else if (std::ranges::equal(message, brisvia_main_msg)) {
+        return ChainType::BRISVIA_MAIN;
     }
     return std::nullopt;
 }

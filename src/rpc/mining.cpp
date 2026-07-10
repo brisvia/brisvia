@@ -141,10 +141,10 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock&& block, uint64_t&
     block.hashMerkleRoot = BlockMerkleRoot(block);
 
     if (chainman.GetConsensus().fPowRandomX) {
-        // Brisvia: mine by RandomX (not SHA256d). Seed by HEIGHT from the active chain: resolved under cs_main
-        // (briefly) and mined WITHOUT the lock (the RandomX loop is expensive). Matches what the validator
-        // requires (same parent + height), even when crossing the seed rotation (height 64, 2112, ...).
-        // TODO (production miner): dedicated fast/dataset engine instead of the validator's light VM.
+        // Brisvia: mine via RandomX (not SHA256d). Seed by HEIGHT from the active branch: it is resolved under
+        // cs_main (briefly) and mined WITHOUT the lock (the RandomX loop is expensive). It matches what the
+        // validator requires (same parent + height), even when crossing the seed rotation (height 64, 2112, ...).
+        // TODO Phase 7 (production miner): dedicated fast/dataset engine instead of the validator's light VM.
         uint256 brisvia_seed;
         {
             LOCK(cs_main);
@@ -1041,7 +1041,7 @@ static RPCHelpMan getblocktemplate()
     }
 
     // Brisvia: RandomX mining contract. The node (Core) is the authority for the seed; the external miner
-    // only runs RandomX over the 80-byte header with the nonce at offset 76.
+    // only runs RandomX over the 80-byte header with the nonce at offset 76. See PLAN_CONTINUACION_MINADO.
     if (consensusParams.fPowRandomX) {
         const int nHeight = pindexPrev->nHeight + 1;
         UniValue brisvia(UniValue::VOBJ);

@@ -14,7 +14,8 @@ enum class ChainType {
     SIGNET,
     REGTEST,
     TESTNET4,
-    BRISVIA_TESTNET, //!< Brisvia: own test network (RandomX PoW + emission + ASERT), fully separate identity
+    BRISVIA_TESTNET, //!< Brisvia: dedicated test network (RandomX PoW + emission + ASERT), fully separate identity
+    BRISVIA_MAIN, //!< Brisvia: MAIN network (mainnet) -- real money, own and separate network identity
 };
 
 std::string ChainTypeToString(ChainType chain);

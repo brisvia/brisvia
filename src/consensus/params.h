@@ -154,25 +154,26 @@ struct Params {
     }
 
     // ===== Brisvia: Proof of Work RandomX + ASERT-BRVA-v1 =====
-    /** true: RandomX PoW (ASERT-BRVA-v1); false: classic SHA256d (regtest / fallback). */
+    // See core-port/consensus/BRISVIA-CHAINPARAMS.md and BRISVIA-POW-PORT.md.
+    /** true: PoW via RandomX (ASERT-BRVA-v1); false: classic SHA256d (regtest / fallback). */
     bool fPowRandomX{false};
-    /** ASERT active from this height (Brisvia: 1, from the very first block). */
+    /** ASERT active from this height (Brisvia: 1, from the first block). */
     int nASERTActivationHeight{0};
     /** ASERT half-life in seconds (Brisvia: 21600 = 6 h, provisional). */
     int64_t nASERTHalfLife{0};
     /** ASERT anchor. Brisvia uses the genesis with a "synthetic parent": nPrevBlockTime = genesis.nTime - spacing. */
     struct ASERTAnchor { int nHeight; uint32_t nBits; int64_t nPrevBlockTime; };
     std::optional<ASERTAnchor> asertAnchorParams;
-    /** Fixed RandomX seed for heights 0..63 (before the seed block exists). 32 bytes set right at launch
-     *  (derived from an unpredictable public datum). */
+    /** Fixed RandomX seed for heights 0..63 (before the seed block exists). 32 bytes that are
+     *  fixed at the fair launch (derived from an unpredictable public datum). See BRISVIA-POW-PORT.md section 3. */
     uint256 brisviaInitialSeed{};
-    /** Brisvia emission (0 = use Bitcoin's). In COIN units. Initial reward (25 BRVA) and perpetual tail
-     *  (1 BRVA). Halving from nHeight-1 with nSubsidyHalvingInterval; height 0 (genesis) yields 0.
+    /** Brisvia emission (0 = use Bitcoin's). In COIN units. Initial reward (25 BRVA) and perpetual
+     *  tail (1 BRVA). Halving from nHeight-1 with nSubsidyHalvingInterval; height 0 (genesis) gives 0.
      *  The pure logic lives in consensus/brisvia_emission.h; GetBlockSubsidy calls it with these values. */
     int64_t nBrisviaInitialSubsidy{0};
     int64_t nBrisviaTailSubsidy{0};
-    /** EXPLICIT selector of the Brisvia emission regime (do not derive it from the tail value). PoW and monetary
-     *  policy are independent rules. If true, GetBlockSubsidy uses the Brisvia emission. */
+    /** EXPLICIT selector for the Brisvia emission regime (do not derive it from the tail value). PoW and monetary
+     *  policy are independent rules. If true, GetBlockSubsidy uses the Brisvia emission. [FIX_REVIEW Phase 2] */
     bool fBrisviaSubsidy{false};
 };
 

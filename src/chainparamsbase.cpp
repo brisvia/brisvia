@@ -52,6 +52,8 @@ std::unique_ptr<CBaseChainParams> CreateBaseChainParams(const ChainType chain)
         return std::make_unique<CBaseChainParams>("regtest", 18443);
     case ChainType::BRISVIA_TESTNET:
         return std::make_unique<CBaseChainParams>("brisvia-testnet", 19332); // own datadir and RPC (isolates from Bitcoin)
+    case ChainType::BRISVIA_MAIN:
+        return std::make_unique<CBaseChainParams>("brisvia-mainnet", 9332); // own datadir and RPC for the Brisvia mainnet
     }
     assert(false);
 }
