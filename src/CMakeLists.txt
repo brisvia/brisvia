@@ -26,15 +26,16 @@ endif()
 include(../cmake/secp256k1.cmake)
 add_secp256k1(secp256k1)
 
-# Brisvia: RandomX (Proof of Work engine). Precompiled library rx/brva-v1 = pure RandomX v1.2.1
-# (tevador, commit 102f8ac). See the Brisvia PoW design notes.
-# Configurable location: defaults to the native Linux build; to cross-compile to Windows pass
-# -DBRISVIA_RANDOMX_LIB=<librandomx.a from mingw> and -DBRISVIA_RANDOMX_INCLUDE=<headers> on the first invocation.
+# Brisvia: RandomX (Proof of Work engine). Pure RandomX v1.2.2 included as the `randomx` git submodule.
+# See the Brisvia PoW design notes. Defaults to the submodule build (src/randomx/build); build it once with
+# `cmake -S src/randomx -B src/randomx/build && cmake --build src/randomx/build`. To cross-compile (e.g. a
+# Windows binary with mingw), build RandomX for the target and pass -DBRISVIA_RANDOMX_LIB=<librandomx.a> and
+# -DBRISVIA_RANDOMX_INCLUDE=<headers> at the first configure.
 if(NOT DEFINED BRISVIA_RANDOMX_LIB)
-  set(BRISVIA_RANDOMX_LIB "$ENV{HOME}/randomx-lib/build/librandomx.a")
+  set(BRISVIA_RANDOMX_LIB "${CMAKE_CURRENT_SOURCE_DIR}/randomx/build/librandomx.a")
 endif()
 if(NOT DEFINED BRISVIA_RANDOMX_INCLUDE)
-  set(BRISVIA_RANDOMX_INCLUDE "$ENV{HOME}/randomx-lib/src")
+  set(BRISVIA_RANDOMX_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/randomx/src")
 endif()
 add_library(randomx STATIC IMPORTED)
 set_target_properties(randomx PROPERTIES
