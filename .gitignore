@@ -26,3 +26,9 @@ target/
 /guix-build-*
 
 /ci/scratch/
+
+# Secrets and credentials (never commit these)
+*.key
+*.pem
+.env
+*.cookie

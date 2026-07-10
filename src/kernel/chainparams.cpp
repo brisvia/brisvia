@@ -300,10 +300,10 @@ public:
             // Bitcoin testnet stays intact. =====
             consensus.fPowRandomX = true;
             consensus.nPowTargetSpacing = 120;                 // provisional: fast blocks for testing
-            consensus.nSubsidyHalvingInterval = 210000;        // mainnet-like scheme (emission governed by Brisvia)
+            consensus.nSubsidyHalvingInterval = 210000;        // DEV/LEGACY additive mode only - NOT the Brisvia mainnet emission (mainnet = 50 BRVA, halving 1M, no tail, 100M cap).
             consensus.nBrisviaInitialSubsidy = 25 * COIN;
             consensus.nBrisviaTailSubsidy = 1 * COIN;
-            consensus.fBrisviaSubsidy = true;                  // Brisvia emission regime (25 -> tail 1), not Bitcoin's
+            consensus.fBrisviaSubsidy = true;                  // legacy dev additive values (25 -> tail 1), not Bitcoin's and not the Brisvia mainnet regime
             consensus.nASERTHalfLife = 21600;                  // 6 h
             consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff)
             consensus.fPowNoRetargeting = false;               // ASERT ACTIVE: real difficulty (the key difference vs regtest)
@@ -641,10 +641,10 @@ public:
             // instant mining). Enabled via option; with brisvia_pow=false the Bitcoin regtest stays intact. =====
             consensus.fPowRandomX = true;
             consensus.nPowTargetSpacing = 120;
-            consensus.nSubsidyHalvingInterval = 150; // regtest chico
+            consensus.nSubsidyHalvingInterval = 150; // DEV/LEGACY additive mode only - NOT the Brisvia mainnet emission (mainnet = 50 BRVA, halving 1M, no tail, 100M cap).
             consensus.nBrisviaInitialSubsidy = 25 * COIN;
             consensus.nBrisviaTailSubsidy = 1 * COIN;
-            consensus.fBrisviaSubsidy = true; // explicit selector of the emission regime
+            consensus.fBrisviaSubsidy = true; // legacy dev additive values (25 -> tail 1), not Bitcoin's and not the Brisvia mainnet regime
             consensus.nASERTHalfLife = 21600;
             consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff)
             consensus.brisviaInitialSeed = uint256{"4242424242424242424242424242424242424242424242424242424242424242"};
@@ -716,7 +716,8 @@ public:
 
 /**
  * Brisvia CANONICAL testnet (ChainType::BRISVIA_TESTNET): own test network with an identity fully separate from
- * Bitcoin (own magic, port, datadir, RPC and prefix). PoW RandomX + Brisvia emission (25 -> tail 1) + ASERT
+ * Bitcoin (own magic, port, datadir, RPC and prefix). PoW RandomX + Brisvia emission (50 BRVA per block,
+ * halving every 1,000,000 blocks, no tail, max supply 100,000,000 BRVA) + ASERT
  * active. Genesis with a real launch date and calibrated initial difficulty.
  * Selected with -chain=brisvia-test.
  */
@@ -727,7 +728,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
 
-        // Brisvia emission (not Bitcoin's): 25 BRVA -> perpetual tail 1 BRVA.
+        // Brisvia emission (not Bitcoin's): 50 BRVA per block, halving every 1,000,000 blocks, no tail, 100M cap.
         consensus.nSubsidyHalvingInterval = 1000000;
         consensus.nBrisviaInitialSubsidy = 50 * COIN;
         consensus.nBrisviaTailSubsidy = 0; // no tail: finite emission Bitcoin-style, 100M total

@@ -28,6 +28,10 @@ Key parameters
 | Emission             | Finite, no tail (Bitcoin-style): 50 → 25 → 12.5 → … → 0        |
 | Maximum supply       | 100,000,000 BRVA                                               |
 | Premine              | 0% — the genesis block has no spendable reward                 |
+| P2P port (mainnet)   | 9333                                                          |
+| Network magic        | BRV1                                                          |
+| Address prefix       | bech32 `brv` (brv1... addresses)                              |
+| Genesis hash         | 7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff |
 
 Emission is finite and predictable. The block reward halves every 1,000,000 blocks with no perpetual tail,
 so the total supply converges to exactly 100 million BRVA, with the last coins mined around block 33,000,000.
@@ -66,7 +70,11 @@ The rest of the build system, dependencies and platform notes are inherited from
 Running a node
 --------------
 
-Brisvia runs its own networks. To join the shared test network:
+Brisvia runs its own networks. To join the main network (real coins):
+
+    build/bin/bitcoind -chain=brisvia
+
+To join the shared test network instead:
 
     build/bin/bitcoind -chain=brisvia-test
 
