@@ -76,6 +76,9 @@ jobs:
       # Step 2: configure Brisvia Core. RandomX paths default to the submodule
       # build, so no extra flags are needed. GUI/bench/fuzz are already off by
       # default; we set them explicitly to keep the build minimal and predictable.
+      # ENABLE_IPC is ON by default on Linux and pulls in the bundled
+      # libmultiprocess subtree, which requires Cap'n Proto — the unit tests do
+      # not need it, so we turn it off to avoid an extra dependency.
       # WITH_CCACHE is on by default and picks up the ccache installed above.
       - name: Configure Brisvia Core (tests only, no GUI/bench/fuzz)
         run: |
@@ -83,7 +86,8 @@ jobs:
             -DBUILD_TESTS=ON \
             -DBUILD_GUI=OFF \
             -DBUILD_BENCH=OFF \
-            -DBUILD_FUZZ_BINARY=OFF
+            -DBUILD_FUZZ_BINARY=OFF \
+            -DENABLE_IPC=OFF
 
       # Build only the unit-test binary and its dependencies — not bitcoind,
       # bitcoin-cli, etc. This is the minimum needed to run the tests.
