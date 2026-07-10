@@ -27,14 +27,14 @@ include(../cmake/secp256k1.cmake)
 add_secp256k1(secp256k1)
 
 # Brisvia: RandomX (Proof of Work engine). Precompiled library rx/brva-v1 = pure RandomX v1.2.1
-# (tevador, commit 102f8ac). See core-port/consensus/BRISVIA-POW-PORT.md sections 9 and 12.
+# (tevador, commit 102f8ac). See the Brisvia PoW design notes.
 # Configurable location: defaults to the native Linux build; to cross-compile to Windows pass
 # -DBRISVIA_RANDOMX_LIB=<librandomx.a from mingw> and -DBRISVIA_RANDOMX_INCLUDE=<headers> on the first invocation.
 if(NOT DEFINED BRISVIA_RANDOMX_LIB)
-  set(BRISVIA_RANDOMX_LIB "/root/randomx-lib/build/librandomx.a")
+  set(BRISVIA_RANDOMX_LIB "$ENV{HOME}/randomx-lib/build/librandomx.a")
 endif()
 if(NOT DEFINED BRISVIA_RANDOMX_INCLUDE)
-  set(BRISVIA_RANDOMX_INCLUDE "/root/randomx-lib/src")
+  set(BRISVIA_RANDOMX_INCLUDE "$ENV{HOME}/randomx-lib/src")
 endif()
 add_library(randomx STATIC IMPORTED)
 set_target_properties(randomx PROPERTIES

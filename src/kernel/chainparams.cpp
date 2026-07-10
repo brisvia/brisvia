@@ -644,7 +644,7 @@ public:
             consensus.nSubsidyHalvingInterval = 150; // regtest chico
             consensus.nBrisviaInitialSubsidy = 25 * COIN;
             consensus.nBrisviaTailSubsidy = 1 * COIN;
-            consensus.fBrisviaSubsidy = true; // explicit selector of the emission regime [FIX_REVIEW Phase 2]
+            consensus.fBrisviaSubsidy = true; // explicit selector of the emission regime
             consensus.nASERTHalfLife = 21600;
             consensus.powLimit = uint256{"7fffff0000000000000000000000000000000000000000000000000000000000"}; // SetCompact(0x207fffff)
             consensus.brisviaInitialSeed = uint256{"4242424242424242424242424242424242424242424242424242424242424242"};

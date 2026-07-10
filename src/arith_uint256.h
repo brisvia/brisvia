@@ -291,7 +291,7 @@ arith_uint256 UintToArith256(const uint256 &);
 extern template class base_uint<256>;
 
 // Brisvia: 512-bit integer for the intermediate calculations of ASERT (avoids overflow). See
-// core-port/consensus/BRISVIA-POW-PORT.md section 8. Only used inside CalculateASERT.
+// the Brisvia PoW design notes section 8. Only used inside CalculateASERT.
 class arith_uint512 : public base_uint<512> {
 public:
     arith_uint512() {}

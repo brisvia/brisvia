@@ -134,7 +134,7 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                // Brisvia [FIX_REVIEW Phase 2/6]: the real PoW is CONTEXTUAL RandomX (height + branch seed).
+                // Brisvia: the real PoW is CONTEXTUAL RandomX (height + branch seed).
                 // It CANNOT be checked here: the DB is walked by hash (not by height) and the ancestors may not
                 // be loaded. The block was already validated on acceptance. Here we only sanity-check the RANGE of nBits (the
                 // header SHA256d does NOT meet the target in Brisvia; RandomX does).
@@ -1024,7 +1024,7 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 
     const auto block_hash{block.GetHash()};
 
-    // Check the header. Brisvia [FIX_REVIEW Phase 2/6]: the real PoW is contextual RandomX; when reading from disk (with
+    // Check the header. Brisvia: the real PoW is contextual RandomX; when reading from disk (with
     // an already validated index) only the nBits range is sanity-checked. See BRISVIA-VALIDATION-INTEGRATION.md Phase 6.
     const auto& cons_read = GetConsensus();
     const bool header_pow_sane = cons_read.fPowRandomX

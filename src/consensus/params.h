@@ -154,7 +154,7 @@ struct Params {
     }
 
     // ===== Brisvia: Proof of Work RandomX + ASERT-BRVA-v1 =====
-    // See core-port/consensus/BRISVIA-CHAINPARAMS.md and BRISVIA-POW-PORT.md.
+    // See the Brisvia chainparams design notes and the PoW design notes.
     /** true: PoW via RandomX (ASERT-BRVA-v1); false: classic SHA256d (regtest / fallback). */
     bool fPowRandomX{false};
     /** ASERT active from this height (Brisvia: 1, from the first block). */
@@ -165,7 +165,7 @@ struct Params {
     struct ASERTAnchor { int nHeight; uint32_t nBits; int64_t nPrevBlockTime; };
     std::optional<ASERTAnchor> asertAnchorParams;
     /** Fixed RandomX seed for heights 0..63 (before the seed block exists). 32 bytes that are
-     *  fixed at the fair launch (derived from an unpredictable public datum). See BRISVIA-POW-PORT.md section 3. */
+     *  fixed at the fair launch (derived from an unpredictable public datum). See the PoW design notes section 3. */
     uint256 brisviaInitialSeed{};
     /** Brisvia emission (0 = use Bitcoin's). In COIN units. Initial reward (25 BRVA) and perpetual
      *  tail (1 BRVA). Halving from nHeight-1 with nSubsidyHalvingInterval; height 0 (genesis) gives 0.
@@ -173,7 +173,7 @@ struct Params {
     int64_t nBrisviaInitialSubsidy{0};
     int64_t nBrisviaTailSubsidy{0};
     /** EXPLICIT selector for the Brisvia emission regime (do not derive it from the tail value). PoW and monetary
-     *  policy are independent rules. If true, GetBlockSubsidy uses the Brisvia emission. [FIX_REVIEW Phase 2] */
+     *  policy are independent rules. If true, GetBlockSubsidy uses the Brisvia emission. */
     bool fBrisviaSubsidy{false};
 };
 

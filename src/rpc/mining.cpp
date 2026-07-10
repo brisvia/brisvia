@@ -1041,7 +1041,7 @@ static RPCHelpMan getblocktemplate()
     }
 
     // Brisvia: RandomX mining contract. The node (Core) is the authority for the seed; the external miner
-    // only runs RandomX over the 80-byte header with the nonce at offset 76. See PLAN_CONTINUACION_MINADO.
+    // only runs RandomX over the 80-byte header with the nonce at offset 76. See the mining design notes.
     if (consensusParams.fPowRandomX) {
         const int nHeight = pindexPrev->nHeight + 1;
         UniValue brisvia(UniValue::VOBJ);

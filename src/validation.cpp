@@ -1923,7 +1923,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     // Brisvia: custom emission (genesis 0, initial 25 BRVA, halving from block 1, perpetual tail 1 BRVA).
-    // [FIX_REVIEW Phase 2] EXPLICIT selector (fBrisviaSubsidy), not the tail value: PoW and monetary
+    // EXPLICIT selector (fBrisviaSubsidy), not the tail value: PoW and monetary
     // policy are independent rules; tying the regime to nBrisviaTailSubsidy>0 could revert to Bitcoin
     // emission by accident (zero tail / misinitialized chainparam) = consensus deviation.
     if (consensusParams.fBrisviaSubsidy) {
@@ -4091,7 +4091,7 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
 
-    // Brisvia [FIX_REVIEW Phase 2]: do NOT set fChecked when the real PoW (RandomX) is contextual and was not
+    // Brisvia: do NOT set fChecked when the real PoW (RandomX) is contextual and was not
     // checked here (CheckBlockHeader only validated the nBits range). Setting it would leave the block as
     // "fully checked" without RandomX -> contract bug (VerifyDB, tools, future refactors).
     if (fCheckPOW && fCheckMerkleRoot && !consensusParams.fPowRandomX)
@@ -4210,7 +4210,7 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
  *  v0.12 and v0.15 (when no additional protection was in place) whereby an attacker could unboundedly
  *  grow our in-memory block index. See https://bitcoincore.org/en/2024/07/03/disclose-header-spam.
  */
-// Brisvia [FIX_REVIEW Phase 2]: fCheckPOW WITHOUT a default value, on purpose: it forces every caller to declare it
+// Brisvia: fCheckPOW WITHOUT a default value, on purpose: it forces every caller to declare it
 // explicitly and lets the compiler audit that no acceptance path omits RandomX by accident.
 static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool fCheckPOW) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {

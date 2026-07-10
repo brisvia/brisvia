@@ -52,7 +52,7 @@ bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Par
  */
 bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t height, uint32_t old_nbits, uint32_t new_nbits);
 
-// ===== Brisvia: ASERT-BRVA-v1 (difficulty adjustment). See core-port/consensus/BRISVIA-POW-PORT.md section 8 =====
+// ===== Brisvia: ASERT-BRVA-v1 (difficulty adjustment). See the Brisvia PoW design notes section 8 =====
 /**
  * Computes the next target via ASERT (absolute formulation from the anchor), clamped to powLimit.
  * Math validated against the Python oracle (asert_oracle.py): 8160 vectors, 0 failures.
@@ -78,10 +78,10 @@ uint32_t GetNextASERTWorkRequiredFromValues(int prevHeight, int64_t prevTime,
                                             const CBlockHeader* pblock,
                                             const Consensus::Params& params) noexcept;
 
-// ===== Brisvia: PURE functions for RandomX input/output (Commit 5). See BRISVIA-POW-PORT.md section 2 =====
+// ===== Brisvia: PURE functions for RandomX input/output (Commit 5). See the PoW design notes section 2 =====
 /**
  * Serializes the header into the 80 canonical bytes passed to RandomX, with EXPLICIT endianness
- * (never implicit) [audit R5]. Layout: version(4 LE) | hashPrevBlock(32) | hashMerkleRoot(32) |
+ * (never implicit) (audit). Layout: version(4 LE) | hashPrevBlock(32) | hashMerkleRoot(32) |
  * nTime(4 LE) | nBits(4 LE) | nNonce(4 LE) = 80. The nonce sits at offset 76. It is identical to the
  * standard Bitcoin network format; it is written field by field so as not to depend on the struct layout nor on the
  * header still having 6 fields. Single definition: used by consensus, RPC, tests, miner and vectors.
@@ -91,7 +91,7 @@ std::array<unsigned char, BRISVIA_RANDOMX_INPUT_SIZE> SerializeHeaderForRandomX(
 /**
  * Interprets the 32 output bytes of RandomX as the 256-bit integer compared against the target.
  * FIXED and documented rule: little-endian (rx[0] is the least significant byte), same as Bitcoin's
- * uint256/UintToArith256 convention. Explicit endianness [audit R5]. Covered with byte-by-byte vectors.
+ * uint256/UintToArith256 convention. Explicit endianness (audit). Covered with byte-by-byte vectors.
  */
 arith_uint256 RandomXOutputToTargetInteger(const unsigned char (&rx)[32]);
 
@@ -100,7 +100,7 @@ uint256 RandomXOutputToUint256(const unsigned char (&rx)[32]);
 
 /**
  * Returns the RandomX SEED (32-byte key) used to mine/validate the block at height `nHeight`.
- * See BRISVIA-POW-PORT.md section 3. Seed by HEIGHT (not by time):
+ * See the PoW design notes section 3. Seed by HEIGHT (not by time):
  *  - heights 0..63: fixed launch constant (params.brisviaInitialSeed).
  *  - heights >= 64: hash of the block at height BrisviaSeedHeight(nHeight), taken from the CANDIDATE BRANCH
  *    via pindexPrev->GetAncestor(...). Since seedHeight <= nHeight-64, the ancestor always exists.
@@ -108,9 +108,9 @@ uint256 RandomXOutputToUint256(const unsigned char (&rx)[32]);
  */
 uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Consensus::Params& params);
 
-// ===== Brisvia: contextual verification of PoW via RandomX (Commit 5). See BRISVIA-POW-PORT.md section 5 =====
+// ===== Brisvia: contextual verification of PoW via RandomX (Commit 5). See the PoW design notes section 5 =====
 /**
- * TRI-STATE result (audit R4, blocking): a `bool` cannot mean at the same time "invalid PoW" and
+ * TRI-STATE result (audit, blocking): a `bool` cannot mean at the same time "invalid PoW" and
  * "local RandomX failure" (OOM, could not create the VM, missing JIT, shutdown). Mixing them would ban peers and
  * contaminate the index according to each node's memory -> possible divergence. INTERNAL_ERROR is NOT INVALID.
  */

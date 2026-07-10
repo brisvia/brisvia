@@ -50,7 +50,7 @@ BOOST_AUTO_TEST_CASE(official_vector)
 }
 
 // SerializeHeaderForRandomX must yield 80 bytes IDENTICAL to Bitcoin's standard network serialization,
-// with the nonce at offset 76 (little-endian). Hardens the canonical input to RandomX (audit R5).
+// with the nonce at offset 76 (little-endian). Hardens the canonical input to RandomX (audit).
 BOOST_AUTO_TEST_CASE(header_serialization_matches_canonical)
 {
     CBlockHeader header;
@@ -611,7 +611,7 @@ BOOST_AUTO_TEST_CASE(branch_context_validate_and_advance)
 }
 
 // Mines the regtest GENESIS block with RandomX (not SHA256d) and records the values for chainparams.
-// Key point (ChatGPT): the block's SHA256d ID does NOT have to meet the target; the one that meets it is
+// Key point: the block's SHA256d ID does NOT have to meet the target; the one that meets it is
 // RandomX. Reward 0 with OP_RETURN <anchor> (fair-launch lock, no one's key).
 BOOST_AUTO_TEST_CASE(mine_regtest_genesis)
 {
@@ -705,7 +705,7 @@ BOOST_AUTO_TEST_CASE(mine_testnet_genesis)
 // Mines the CANONICAL GENESIS of the Brisvia testnet (ChainType::BRISVIA_TESTNET). Unlike the rehearsal, it uses:
 //  - real launch nTime (prevents ASERT from starting "behind" and leaving difficulty at the floor).
 //  - CALIBRATED nBits (harder than powLimit) as the ASERT anchor, to avoid a block storm at the start.
-// Fixes validated with ChatGPT (2026-07-07). Prints the values to freeze in chainparams.
+// Fixes validated (2026-07-07). Prints the values to freeze in chainparams.
 BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
 {
     const char* pszTimestamp = "Brisvia testnet genesis - rx/brva-v1";
@@ -800,7 +800,7 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_mainnet_genesis)
 }
 
 // RandomX C++ <-> Rust consistency VECTOR (miner Step 2.1). FIXED input and seed -> expected hash.
-// The Rust miner MUST reproduce exactly these 32 bytes; otherwise mining is not started (ChatGPT 2026-07-07).
+// The Rust miner MUST reproduce exactly these 32 bytes; otherwise mining is not started.
 BOOST_AUTO_TEST_CASE(brisvia_randomx_vector)
 {
     unsigned char key[32], input[80];

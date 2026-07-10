@@ -117,7 +117,7 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
 {
     if (params.fPowAllowMinDifficultyBlocks) return true;
 
-    // Brisvia [audit R6]: ASERT-BRVA-v1 changes nBits EVERY block, so the "factor 4 only at 2016 boundaries"
+    // Brisvia (audit): ASERT-BRVA-v1 changes nBits EVERY block, so the "factor 4 only at 2016 boundaries"
     // window below would REJECT valid ASERT blocks. With ASERT active, the exact nBits value is validated by
     // comparing against GetNextWorkRequired (ASERT) in ContextualCheckBlockHeader; the 2016 rule is not applied
     // here. Additive: without these params (regtest / base tree), the original logic is preserved.
@@ -204,7 +204,7 @@ bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Par
 }
 
 // ===================== Brisvia: ASERT-BRVA-v1 (difficulty adjustment) =====================
-// See core-port/consensus/BRISVIA-POW-PORT.md section 8 and BRISVIA-CHAINPARAMS.md.
+// See the Brisvia PoW design notes section 8 and the chainparams design notes.
 // CalculateASERT: aserti3 formula (Bitcoin Cash/ScashX) with arith_uint512 in the intermediates. Validated
 // against the Python oracle: 8160 vectors, 0 failures. Additive: GetNextWorkRequired does not call it yet
 // (it is wired in once the Brisvia chainparams are present), so it does not change the current consensus.
@@ -301,7 +301,7 @@ uint32_t GetNextASERTWorkRequired(const CBlockIndex* pindexPrev,
 }
 
 // ===================== Brisvia: PURE RandomX input/output functions =====================
-// See core-port/consensus/BRISVIA-POW-PORT.md section 2. EXPLICIT endianness (audit R5).
+// See the Brisvia PoW design notes section 2. EXPLICIT endianness (audit).
 std::array<unsigned char, BRISVIA_RANDOMX_INPUT_SIZE> SerializeHeaderForRandomX(const CBlockHeader& block)
 {
     static_assert(BRISVIA_RANDOMX_INPUT_SIZE == 80, "the Brisvia RandomX header is 80 bytes");
@@ -336,7 +336,7 @@ uint256 RandomXOutputToUint256(const unsigned char (&rx)[32])
     return h;
 }
 
-// RandomX seed by HEIGHT (see BRISVIA-POW-PORT.md section 3). Deterministic and robust against
+// RandomX seed by HEIGHT (see the PoW design notes section 3). Deterministic and robust against
 // timestamp manipulation and reorgs: the key comes from an earlier block of the CANDIDATE BRANCH.
 uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Consensus::Params& params)
 {
@@ -355,9 +355,8 @@ uint256 BrisviaGetSeedHash(const CBlockIndex* pindexPrev, int nHeight, const Con
 }
 
 // ===================== Brisvia: RandomX engine (VM) management =====================
-// See core-port/consensus/BRISVIA-POW-PORT.md section 4/5. Corrections applied (audit + FIX_REVIEW
-// design reference):
-//  - LRU indexed by SEED (uint256), NEVER by epoch [R2].
+// Design notes. Corrections applied from audit and design review:
+//  - LRU indexed by SEED (uint256), NEVER by epoch.
 //  - REAL single-flight even under eviction: construction is serialized with g_rx_build_mutex (one cache
 //    of 256 MiB at a time) and the map is re-checked after acquiring it, so two threads NEVER build the same
 //    seed (nor two different seeds at once -> avoids RAM/OOM spikes).
@@ -381,7 +380,7 @@ using RandomXCacheRef = std::shared_ptr<RandomXCacheWrapper>;
 struct RandomXVMWrapper {
     randomx_vm* vm{nullptr};
     RandomXCacheRef cache;          // keeps the cache alive while the VM exists
-    std::mutex hashing_mutex;       // a VM cannot hash from two threads at once [R7]
+    std::mutex hashing_mutex;       // a VM cannot hash from two threads at once
     RandomXVMWrapper(randomx_vm* v, RandomXCacheRef c) : vm(v), cache(std::move(c)) {}
     ~RandomXVMWrapper() { if (vm) randomx_destroy_vm(vm); } // destroy the VM before releasing the cache
     RandomXVMWrapper(const RandomXVMWrapper&) = delete;
@@ -399,7 +398,7 @@ using VMUnique    = std::unique_ptr<randomx_vm, RandomXVMDeleter>;
 struct RandomXSlot {
     RandomXVMRef vm;
 };
-// Negative cache SEPARATE from the VM LRU [FIX_REVIEW round 2]: a failure does not take 256 MiB, must not evict
+// Negative cache SEPARATE from the VM LRU: a failure does not take 256 MiB, must not evict
 // a healthy VM, nor lose its backoff when the LRU rotates. It is just metadata, with its own larger limit.
 struct RandomXFailure {
     int fail_count{0};
@@ -473,7 +472,7 @@ RandomXVMRef BuildLightVM(const uint256& seedHash)
             VMUnique vm{randomx_create_vm(f, cache.get(), nullptr)};            // light: cache, no dataset
             if (!vm) continue;
             // Release the unique_ptrs ONLY after a definitive owner exists (avoids a leak if make_shared
-            // throws bad_alloc). [FIX_REVIEW round 2, 4.1]
+            // throws bad_alloc).
             auto cacheRef = std::make_shared<RandomXCacheWrapper>(cache.get());
             cache.release();
             auto vmRef = std::make_shared<RandomXVMWrapper>(vm.get(), cacheRef);
@@ -497,7 +496,7 @@ std::shared_ptr<RandomXSlot> TouchSlot(const uint256& seedHash)
     auto it = g_rx_slots.find(seedHash);
     if (it == g_rx_slots.end()) return nullptr;
     // splice moves the existing node to the front WITHOUT allocating memory (no-throw): it does not leave
-    // dangling iterators as erase+push_front would if push_front threw. [FIX_REVIEW round 2, 4.2]
+    // dangling iterators as erase+push_front would if push_front threw.
     g_rx_lru.splice(g_rx_lru.begin(), g_rx_lru, it->second.second);
     it->second.second = g_rx_lru.begin();
     return it->second.first;
@@ -542,7 +541,7 @@ RandomXVMRef GetBrisviaVM(const uint256& seedHash)
     RandomXVMRef vm = BuildLightVM(seedHash);
 
     // 4) Store. A success goes to the LRU (at most ONE victim, destroyed outside the lock). A failure goes ONLY to
-    //    the negative cache: it does not evict healthy VMs nor lose the backoff when the LRU rotates. [FIX_REVIEW round 2]
+    //    the negative cache: it does not evict healthy VMs nor lose the backoff when the LRU rotates.
     std::shared_ptr<RandomXSlot> evicted;
     {
         std::lock_guard<std::mutex> lk(g_rx_mutex);
