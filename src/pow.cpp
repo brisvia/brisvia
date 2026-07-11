@@ -416,9 +416,12 @@ std::mutex g_rx_build_mutex;      // serializes VM CONSTRUCTION (one cache of 25
 std::list<uint256> g_rx_lru;      // front = most recent
 std::unordered_map<uint256, std::pair<std::shared_ptr<RandomXSlot>, std::list<uint256>::iterator>, SeedHasher> g_rx_slots;
 std::unordered_map<uint256, RandomXFailure, SeedHasher> g_rx_failures; // negative cache (lightweight, separate)
-// How many seeds (light caches) to keep. Provisional: current + rival branch + one previous. Not consensus;
-// only affects memory/performance. Configurable by arg later (-randomxcache=1..4).
-size_t g_rx_capacity{3};
+// How many seeds (light caches) to keep. Lowered to 2 (current + rival branch) to bound RAM on the ~956 MB
+// Oracle seed nodes: with 3 caches steady use is 768 MB and the peak while building a new one reaches ~1 GB
+// (the 3 old ones stay resident until the 4th is built), which OOMs a 956 MB box without swap when crossing
+// an epoch (every 2048 blocks) or validating a reorg. With 2 the peak is ~768 MB. Not consensus; only
+// affects memory/performance. Configurable by arg later (-randomxcache=1..4).
+size_t g_rx_capacity{2};
 constexpr size_t g_rx_failures_cap{64}; // the negative cache is metadata: its own limit, much larger than the VMs
 std::atomic<uint64_t> g_rx_build_count{0}; // instrumentation only, for the single-flight test
 

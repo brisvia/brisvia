@@ -867,4 +867,79 @@ BOOST_AUTO_TEST_CASE(brisvia_regtest_chainparams)
     BOOST_CHECK_EQUAL(normal->Bech32HRP(), "bcrt");
 }
 
+// RandomX seed-height selection: fixed initial seed for height < 64, then the seed is the hash of an
+// earlier block, rotating every 2048 blocks with a 64-block lag. Uses the SAME function the node/miner
+// use (BrisviaSeedHeight). See consensus/randomx_seed.h. Exact edges audited pre-mainnet.
+BOOST_AUTO_TEST_CASE(brisvia_seed_height_edges)
+{
+    // Heights 0..63: fixed initial launch seed (a chainparams constant, not a block hash).
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(0),  BRISVIA_SEED_INITIAL);
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(63), BRISVIA_SEED_INITIAL);  // last height with the fixed seed
+    BOOST_CHECK(BrisviaUsesInitialSeed(63));
+    BOOST_CHECK(!BrisviaUsesInitialSeed(64));
+
+    // From height 64 the seed is a real block hash, rotating every 2048 with a lag of 64.
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(64),   0);      // genesis (block 0)
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(2111), 0);      // still genesis (window has not rotated yet)
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(2112), 2048);   // first rotation -> block 2048
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(4159), 2048);   // still block 2048
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(4160), 4096);   // second rotation -> block 4096
+
+    // The seed changes exactly at the boundaries 64 + k*2048 and nowhere else in between.
+    BOOST_CHECK(BrisviaSeedChangesAt(64));    // first switch away from the fixed seed
+    BOOST_CHECK(!BrisviaSeedChangesAt(65));
+    BOOST_CHECK(BrisviaSeedChangesAt(2112));  // 64 + 2048
+    BOOST_CHECK(!BrisviaSeedChangesAt(2113));
+}
+
+// Brisvia MAINNET emission (real parameters, see kernel/chainparams.cpp CBrisviaMainParams):
+// 50 BRVA per block, halving every 1,000,000 blocks, NO tail (finite, Bitcoin-style, ~100M cap).
+// Note on the edges: genesis (height 0) pays 0 (no-premine signal) and halvings are counted FROM
+// block 1 (halvings = (nHeight-1)/interval), so the interval-0 reward (50 BRVA) covers blocks
+// 1..1,000,000 and the FIRST halving lands at block 1,000,001 (not at 1,000,000).
+BOOST_AUTO_TEST_CASE(brisvia_emission_mainnet)
+{
+    const int64_t INI = 50 * COIN; // 50 BRVA = 5,000,000,000 sat
+    const int64_t TAIL = 0;        // no tail: finite emission, 100M cap
+    const int H = 1000000;         // halving interval (mainnet)
+
+    // Interval 0 (50 BRVA): blocks 1..1,000,000. Genesis is 0.
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(0,       INI, TAIL, H), 0);        // genesis: no reward
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1,       INI, TAIL, H), INI);      // first mined block: 50 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(999999,  INI, TAIL, H), INI);      // 50 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1000000, INI, TAIL, H), INI);      // last block of interval 0: still 50 BRVA
+
+    // Interval 1 (25 BRVA): blocks 1,000,001..2,000,000.
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1000001, INI, TAIL, H), INI >> 1); // first halving: 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1999999, INI, TAIL, H), INI >> 1); // 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(2000000, INI, TAIL, H), INI >> 1); // last block of interval 1: 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(2000001, INI, TAIL, H), INI >> 2); // second halving: 12.5 BRVA
+
+    // Halving 32 pays 1 sat (the last positive subsidy); halving 33 onward pays 0 (finite emission).
+    BOOST_CHECK_EQUAL(INI >> 32, 1);                                            // sanity: 5e9 >> 32 == 1
+    BOOST_CHECK_EQUAL(INI >> 33, 0);                                            // sanity: 5e9 >> 33 == 0
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(32 * H,     INI, TAIL, H), 2);     // halvings=31: 2 sat
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(32 * H + 1, INI, TAIL, H), 1);     // halvings=32: 1 sat (first block)
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * H,     INI, TAIL, H), 1);     // halvings=32: 1 sat (last block)
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * H + 1, INI, TAIL, H), 0);     // halvings=33: 0
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(50 * H,     INI, TAIL, H), 0);     // well past exhaustion: 0
+
+    // Total emission = sum over the ~33 halving intervals of (per-block subsidy * blocks per interval).
+    // Each interval is exactly 1,000,000 blocks; the per-block subsidy is taken from the SAME function
+    // (a representative block of each interval). Must equal 9,999,999,989,000,000 sat = 99,999,999.89 BRVA,
+    // which stays just under the 100,000,000 BRVA nominal cap (the ~0.11 BRVA gap comes from integer
+    // truncation of the right-shifts).
+    int64_t total = 0;
+    int intervals = 0;
+    for (int k = 0; ; ++k) {
+        const int64_t s = BrisviaGetBlockSubsidy(k * H + 1, INI, TAIL, H); // representative of interval k
+        if (s == 0) break;
+        total += s * static_cast<int64_t>(H);
+        ++intervals;
+    }
+    BOOST_CHECK_EQUAL(intervals, 33);                       // k = 0..32
+    BOOST_CHECK_EQUAL(total, 9999999989000000LL);           // 99,999,999.89 BRVA
+    BOOST_CHECK(total < 100000000LL * COIN);                // below the 100M BRVA nominal cap
+}
+
 BOOST_AUTO_TEST_SUITE_END()
