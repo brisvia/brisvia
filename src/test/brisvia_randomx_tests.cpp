@@ -942,4 +942,156 @@ BOOST_AUTO_TEST_CASE(brisvia_emission_mainnet)
     BOOST_CHECK(total < 100000000LL * COIN);                // below the 100M BRVA nominal cap
 }
 
+// ===================== Brisvia: mainnet ASERT half-life (10800 s) propagation =====================
+// FUNCTIONAL proof (requested by the external audit) that the mainnet ASERT half-life of 10800 s (3 h),
+// set only in CBrisviaMainParams (kernel/chainparams.cpp: consensus.nASERTHalfLife = 10800), actually reaches
+// the node's live difficulty computation
+//     GetNextWorkRequired -> GetNextASERTWorkRequired -> GetNextASERTWorkRequiredFromValues -> CalculateASERT
+// and is NOT shadowed by any hardcoded constant anywhere on that path. This goes beyond the math differential
+// and beyond the consensus tripwire (brisvia_consensus_guards_tests): it drives the REAL mainnet params object
+// end to end and checks the nBits sequence the node would demand.
+
+// Independent REFERENCE oracle: a self-contained mirror of the aserti3 formula (CalculateASERT in pow.cpp),
+// taking the half-life as an EXPLICIT argument. Not wired to consensus; used only to compute expected nBits with
+// an arbitrary half-life. The formula itself is already audited (Python oracle, 8160 vectors), so any mismatch
+// against the real path signals a WIRING/propagation bug, not a formula bug.
+static arith_uint256 AsertRefTarget(const arith_uint256& refTarget, int64_t spacing, int64_t timeDiff,
+                                    int64_t heightDiff, const arith_uint256& powLimit, int64_t halfLife)
+{
+    const int64_t exponent = ((timeDiff - spacing * (heightDiff + 1)) * 65536) / halfLife;
+    int64_t shifts = exponent >> 16;
+    const auto frac = uint16_t(exponent);
+    const uint32_t factor = 65536 + ((
+        + 195766423245049ull * frac
+        + 971821376ull * frac * frac
+        + 5127ull * frac * frac * frac
+        + (1ull << 47)
+        ) >> 48);
+    arith_uint512 next512 = arith_uint512::from(refTarget) * factor;
+    arith_uint512 powLimit512 = arith_uint512::from(powLimit);
+    shifts -= 16;
+    if (shifts <= 0) {
+        next512 >>= -shifts;
+    } else {
+        const auto shifted = next512 << shifts;
+        if ((shifted >> shifts) != next512) {
+            next512 = powLimit512;
+        } else {
+            next512 = shifted;
+        }
+    }
+    if (next512 > powLimit512) next512 = powLimit512;
+    arith_uint256 next = arith_uint256::from(next512);
+    if (next == 0) next = arith_uint256(1);
+    else if (next > powLimit) next = powLimit;
+    return next;
+}
+
+// Expected next nBits for a chosen half-life, replicating the anchor math of GetNextASERTWorkRequiredFromValues.
+static uint32_t AsertRefNextBits(const Consensus::Params& p, int prevHeight, int64_t prevTime, int64_t halfLife)
+{
+    const auto& a = *p.asertAnchorParams;
+    arith_uint256 refTarget; refTarget.SetCompact(a.nBits);
+    const arith_uint256 powLimit = UintToArith256(p.powLimit);
+    const int64_t timeDiff = prevTime - a.nPrevBlockTime;
+    const int64_t heightDiff = int64_t(prevHeight) - a.nHeight;
+    return AsertRefTarget(refTarget, p.nPowTargetSpacing, timeDiff, heightDiff, powLimit, halfLife).GetCompact();
+}
+
+BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
+{
+    // REAL mainnet params (no hand-copied constants): the object actually built by CBrisviaMainParams.
+    const auto chain = CChainParams::BrisviaMain();
+    const Consensus::Params& params = chain->GetConsensus();
+
+    // Pin the test to the live mainnet source of truth (fails loudly if any of these drifts).
+    BOOST_REQUIRE(params.asertAnchorParams.has_value());
+    BOOST_REQUIRE(params.fPowRandomX);
+    BOOST_REQUIRE(!params.fPowNoRetargeting);            // mainnet retargets for real -> routes to ASERT
+    BOOST_REQUIRE(!params.fPowAllowMinDifficultyBlocks); // no min-difficulty escape hatch
+    BOOST_CHECK_EQUAL(params.nASERTHalfLife, 10800);     // <-- the value under audit
+    BOOST_CHECK_EQUAL(params.nPowTargetSpacing, 120);
+    BOOST_CHECK_EQUAL(params.asertAnchorParams->nBits, 0x1e7fffffu);
+    BOOST_CHECK_EQUAL(UintToArith256(params.powLimit).GetCompact(), 0x207fffffu);
+
+    const auto& anchor = *params.asertAnchorParams;
+    const int64_t spacing = params.nPowTargetSpacing;   // 120
+    const int64_t t0 = anchor.nPrevBlockTime;           // synthetic parent time = genesisTime - spacing
+    arith_uint256 anchorTarget; anchorTarget.SetCompact(anchor.nBits);
+    const arith_uint256 powLimitTarget = UintToArith256(params.powLimit);
+
+    CBlockHeader pblock; // only read by the (disabled) min-difficulty rule; value is irrelevant on mainnet
+    pblock.nTime = static_cast<uint32_t>(t0 + 1);
+
+    // Drive the REAL top-level consensus entry point (GetNextWorkRequired) AND the pure-values variant, require
+    // they agree, and return the nBits the node would demand for the block after (prevHeight, prevTime).
+    auto nodeNextBits = [&](int prevHeight, int64_t prevTime) -> uint32_t {
+        CBlockIndex prev;
+        prev.nHeight = prevHeight;
+        prev.nTime   = static_cast<uint32_t>(prevTime);
+        const uint32_t viaTop    = GetNextWorkRequired(&prev, &pblock, params);                          // routing proof
+        const uint32_t viaValues = GetNextASERTWorkRequiredFromValues(prevHeight, prevTime, &pblock, params);
+        BOOST_CHECK_EQUAL(viaTop, viaValues);
+        return viaTop;
+    };
+
+    // ---------- (a) blocks at the target pace: difficulty STABLE (target == anchor) ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * spacing; // exactly on schedule -> exponent 0
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        BOOST_CHECK_EQUAL(got, anchor.nBits);                                            // stays at the anchor
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));   // oracle @ 10800
+    }
+
+    // ---------- (b) FAST blocks (60 s each): difficulty UP (target DOWN) ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * 60;      // half the target pace
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target < anchorTarget);                                              // difficulty rose
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
+        // Propagation: the real path uses 10800, NOT 21600. A shorter half-life reacts HARDER (target drops more).
+        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
+        BOOST_CHECK(got != bits21600);
+        arith_uint256 t21; t21.SetCompact(bits21600);
+        BOOST_CHECK(target < t21);
+    }
+
+    // ---------- (c) SLOW blocks (240 s each): difficulty DOWN (target UP), never above powLimit ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * 240;     // double the target pace
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target > anchorTarget);                                              // difficulty eased
+        BOOST_CHECK(target <= powLimitTarget);
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
+        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
+        BOOST_CHECK(got != bits21600);
+        arith_uint256 t21; t21.SetCompact(bits21600);
+        BOOST_CHECK(target > t21);   // 10800 eases faster than 21600
+    }
+
+    // ---------- (d) STRONG stall (very long interval): strong recovery (target UP a lot) ----------
+    {
+        const int prevHeight = 10;
+        const int64_t onSchedule = t0 + int64_t(prevHeight + 1) * spacing;
+        const int64_t gap = 86400;                                        // a full day with no new blocks
+        const int64_t prevTime = onSchedule + gap;
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target > anchorTarget);
+        BOOST_CHECK((target >> 6) > anchorTarget);   // rose > 64x: a strong recovery, not a marginal nudge
+        BOOST_CHECK(target < powLimitTarget);        // not clamped, so the differential below is meaningful
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
+        // The 3 h half-life recovers FASTER than the old 6 h one (the very reason for the change).
+        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
+        BOOST_CHECK(got != bits21600);
+        arith_uint256 t21; t21.SetCompact(bits21600);
+        BOOST_CHECK(target > t21);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
