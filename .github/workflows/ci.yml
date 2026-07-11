@@ -94,12 +94,12 @@ jobs:
       - name: Build the unit-test binary (test_bitcoin)
         run: cmake --build build --target test_bitcoin -j"$(nproc)"
 
-      # Run ONLY Brisvia's own two suites. The test names are registered by
-      # src/test/CMakeLists.txt exactly as the Boost.Test suite names.
+      # Run ONLY Brisvia's own suites, including the mainnet consensus guards. The test
+      # names are registered by src/test/CMakeLists.txt exactly as the Boost.Test suite names.
       - name: Run Brisvia unit tests
         run: |
           ctest --test-dir build --output-on-failure \
-            -R '^(brisvia_randomx_tests|brisvia_headerssync_tests)$'
+            -R '^(brisvia_randomx_tests|brisvia_headerssync_tests|brisvia_consensus_guards_tests)$'
 
       - name: Show ccache statistics
         if: always()
