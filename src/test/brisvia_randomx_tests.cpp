@@ -1096,4 +1096,21 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
     }
 }
 
+// Genesis PoW under RandomX (audit blocker CF-13 / C-04). The consensus guards pin the genesis SHA256d id and
+// merkle root, but that does NOT prove the frozen nonce actually satisfies RandomX. A hard-coded genesis never
+// re-traverses PoW at startup, so this proves it explicitly with the REAL mainnet genesis object: the validator
+// runs RandomX over the 80-byte header under the INITIAL launch seed (height 0, no parent) and only returns VALID
+// if the hash meets target(genesisBits). If the mined nonce were wrong, mainnet could not produce a valid genesis.
+BOOST_AUTO_TEST_CASE(mainnet_genesis_randomx_pow)
+{
+    const auto chain = CChainParams::BrisviaMain();
+    const Consensus::Params& params = chain->GetConsensus();
+    const CBlock& genesis = chain->GenesisBlock();
+    BOOST_REQUIRE(params.fPowRandomX);
+    uint256 powHash;
+    const PoWCheckResult r = CheckRandomXProofOfWorkContextual(genesis, /*pindexPrev=*/nullptr, /*nHeight=*/0, params, &powHash);
+    BOOST_CHECK_EQUAL(static_cast<int>(r), static_cast<int>(PoWCheckResult::VALID));
+    BOOST_CHECK(!powHash.IsNull());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
