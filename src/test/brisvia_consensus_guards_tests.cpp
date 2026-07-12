@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(difficulty_flags)
     BOOST_CHECK_MESSAGE(!c.fPowAllowMinDifficultyBlocks, "mainnet must NOT allow min-difficulty blocks");
     BOOST_CHECK_MESSAGE(!c.fPowNoRetargeting, "mainnet must retarget difficulty (ASERT)");
     BOOST_CHECK_EQUAL(c.nPowTargetSpacing, 120);
-    BOOST_CHECK_EQUAL(c.nASERTHalfLife, 10800);
+    BOOST_CHECK_EQUAL(c.nASERTHalfLife, 21600);
 }
 
 // Guard 5: network identity. Magic bytes "BRV1", P2P port 9333, RPC port 9332 and datadir

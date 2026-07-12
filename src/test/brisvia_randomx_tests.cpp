@@ -942,9 +942,9 @@ BOOST_AUTO_TEST_CASE(brisvia_emission_mainnet)
     BOOST_CHECK(total < 100000000LL * COIN);                // below the 100M BRVA nominal cap
 }
 
-// ===================== Brisvia: mainnet ASERT half-life (10800 s) propagation =====================
-// FUNCTIONAL proof (requested by the external audit) that the mainnet ASERT half-life of 10800 s (3 h),
-// set only in CBrisviaMainParams (kernel/chainparams.cpp: consensus.nASERTHalfLife = 10800), actually reaches
+// ===================== Brisvia: mainnet ASERT half-life (21600 s) propagation =====================
+// FUNCTIONAL proof (requested by the external audit) that the mainnet ASERT half-life of 21600 s (6 h),
+// set only in CBrisviaMainParams (kernel/chainparams.cpp: consensus.nASERTHalfLife = 21600), actually reaches
 // the node's live difficulty computation
 //     GetNextWorkRequired -> GetNextASERTWorkRequired -> GetNextASERTWorkRequiredFromValues -> CalculateASERT
 // and is NOT shadowed by any hardcoded constant anywhere on that path. This goes beyond the math differential
@@ -1009,7 +1009,7 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
     BOOST_REQUIRE(params.fPowRandomX);
     BOOST_REQUIRE(!params.fPowNoRetargeting);            // mainnet retargets for real -> routes to ASERT
     BOOST_REQUIRE(!params.fPowAllowMinDifficultyBlocks); // no min-difficulty escape hatch
-    BOOST_CHECK_EQUAL(params.nASERTHalfLife, 10800);     // <-- the value under audit
+    BOOST_CHECK_EQUAL(params.nASERTHalfLife, 21600);     // <-- the value under audit
     BOOST_CHECK_EQUAL(params.nPowTargetSpacing, 120);
     BOOST_CHECK_EQUAL(params.asertAnchorParams->nBits, 0x1e7fffffu);
     BOOST_CHECK_EQUAL(UintToArith256(params.powLimit).GetCompact(), 0x207fffffu);
@@ -1041,7 +1041,7 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
         const int64_t prevTime = t0 + int64_t(prevHeight + 1) * spacing; // exactly on schedule -> exponent 0
         const uint32_t got = nodeNextBits(prevHeight, prevTime);
         BOOST_CHECK_EQUAL(got, anchor.nBits);                                            // stays at the anchor
-        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));   // oracle @ 10800
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));   // oracle @ 21600
     }
 
     // ---------- (b) FAST blocks (60 s each): difficulty UP (target DOWN) ----------
@@ -1051,12 +1051,12 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
         const uint32_t got = nodeNextBits(prevHeight, prevTime);
         arith_uint256 target; target.SetCompact(got);
         BOOST_CHECK(target < anchorTarget);                                              // difficulty rose
-        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
-        // Propagation: the real path uses 10800, NOT 21600. A shorter half-life reacts HARDER (target drops more).
-        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
-        BOOST_CHECK(got != bits21600);
-        arith_uint256 t21; t21.SetCompact(bits21600);
-        BOOST_CHECK(target < t21);
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        // Propagation: the real path uses 21600, NOT 10800. A longer half-life reacts SOFTER (target moves less).
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target > t10);   // 21600 (real) drops less than a 3 h half-life would
     }
 
     // ---------- (c) SLOW blocks (240 s each): difficulty DOWN (target UP), never above powLimit ----------
@@ -1067,11 +1067,11 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
         arith_uint256 target; target.SetCompact(got);
         BOOST_CHECK(target > anchorTarget);                                              // difficulty eased
         BOOST_CHECK(target <= powLimitTarget);
-        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
-        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
-        BOOST_CHECK(got != bits21600);
-        arith_uint256 t21; t21.SetCompact(bits21600);
-        BOOST_CHECK(target > t21);   // 10800 eases faster than 21600
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target < t10);   // 21600 (real) eases slower than a 3 h half-life would
     }
 
     // ---------- (d) STRONG stall (very long interval): strong recovery (target UP a lot) ----------
@@ -1085,12 +1085,12 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
         BOOST_CHECK(target > anchorTarget);
         BOOST_CHECK((target >> 6) > anchorTarget);   // rose > 64x: a strong recovery, not a marginal nudge
         BOOST_CHECK(target < powLimitTarget);        // not clamped, so the differential below is meaningful
-        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 10800));
-        // The 3 h half-life recovers FASTER than the old 6 h one (the very reason for the change).
-        const uint32_t bits21600 = AsertRefNextBits(params, prevHeight, prevTime, 21600);
-        BOOST_CHECK(got != bits21600);
-        arith_uint256 t21; t21.SetCompact(bits21600);
-        BOOST_CHECK(target > t21);
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        // The 6 h half-life recovers more slowly than a 3 h one would; 6 h was chosen for stability on a new small network.
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target < t10);   // 21600 (real) recovers less than a 3 h half-life would
     }
 }
 

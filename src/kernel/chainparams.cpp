@@ -849,7 +849,7 @@ public:
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.enforce_BIP94 = false;
         consensus.fPowNoRetargeting = false;   // ASERT adjusts difficulty for real
-        consensus.nASERTHalfLife = 10800;      // 3 h (shortened from 6h for faster difficulty recovery on a small launch network)
+        consensus.nASERTHalfLife = 21600;      // 6 h (chosen for a new small network: more resistant to timestamp manipulation; ASERT still retargets every block)
         consensus.brisviaInitialSeed = uint256{"5454545454545454545454545454545454545454545454545454545454545454"};
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
