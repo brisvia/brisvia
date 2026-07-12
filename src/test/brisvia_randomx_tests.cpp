@@ -867,4 +867,250 @@ BOOST_AUTO_TEST_CASE(brisvia_regtest_chainparams)
     BOOST_CHECK_EQUAL(normal->Bech32HRP(), "bcrt");
 }
 
+// RandomX seed-height selection: fixed initial seed for height < 64, then the seed is the hash of an
+// earlier block, rotating every 2048 blocks with a 64-block lag. Uses the SAME function the node/miner
+// use (BrisviaSeedHeight). See consensus/randomx_seed.h. Exact edges audited pre-mainnet.
+BOOST_AUTO_TEST_CASE(brisvia_seed_height_edges)
+{
+    // Heights 0..63: fixed initial launch seed (a chainparams constant, not a block hash).
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(0),  BRISVIA_SEED_INITIAL);
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(63), BRISVIA_SEED_INITIAL);  // last height with the fixed seed
+    BOOST_CHECK(BrisviaUsesInitialSeed(63));
+    BOOST_CHECK(!BrisviaUsesInitialSeed(64));
+
+    // From height 64 the seed is a real block hash, rotating every 2048 with a lag of 64.
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(64),   0);      // genesis (block 0)
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(2111), 0);      // still genesis (window has not rotated yet)
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(2112), 2048);   // first rotation -> block 2048
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(4159), 2048);   // still block 2048
+    BOOST_CHECK_EQUAL(BrisviaSeedHeight(4160), 4096);   // second rotation -> block 4096
+
+    // The seed changes exactly at the boundaries 64 + k*2048 and nowhere else in between.
+    BOOST_CHECK(BrisviaSeedChangesAt(64));    // first switch away from the fixed seed
+    BOOST_CHECK(!BrisviaSeedChangesAt(65));
+    BOOST_CHECK(BrisviaSeedChangesAt(2112));  // 64 + 2048
+    BOOST_CHECK(!BrisviaSeedChangesAt(2113));
+}
+
+// Brisvia MAINNET emission (real parameters, see kernel/chainparams.cpp CBrisviaMainParams):
+// 50 BRVA per block, halving every 1,000,000 blocks, NO tail (finite, Bitcoin-style, ~100M cap).
+// Note on the edges: genesis (height 0) pays 0 (no-premine signal) and halvings are counted FROM
+// block 1 (halvings = (nHeight-1)/interval), so the interval-0 reward (50 BRVA) covers blocks
+// 1..1,000,000 and the FIRST halving lands at block 1,000,001 (not at 1,000,000).
+BOOST_AUTO_TEST_CASE(brisvia_emission_mainnet)
+{
+    const int64_t INI = 50 * COIN; // 50 BRVA = 5,000,000,000 sat
+    const int64_t TAIL = 0;        // no tail: finite emission, 100M cap
+    const int H = 1000000;         // halving interval (mainnet)
+
+    // Interval 0 (50 BRVA): blocks 1..1,000,000. Genesis is 0.
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(0,       INI, TAIL, H), 0);        // genesis: no reward
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1,       INI, TAIL, H), INI);      // first mined block: 50 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(999999,  INI, TAIL, H), INI);      // 50 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1000000, INI, TAIL, H), INI);      // last block of interval 0: still 50 BRVA
+
+    // Interval 1 (25 BRVA): blocks 1,000,001..2,000,000.
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1000001, INI, TAIL, H), INI >> 1); // first halving: 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1999999, INI, TAIL, H), INI >> 1); // 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(2000000, INI, TAIL, H), INI >> 1); // last block of interval 1: 25 BRVA
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(2000001, INI, TAIL, H), INI >> 2); // second halving: 12.5 BRVA
+
+    // Halving 32 pays 1 sat (the last positive subsidy); halving 33 onward pays 0 (finite emission).
+    BOOST_CHECK_EQUAL(INI >> 32, 1);                                            // sanity: 5e9 >> 32 == 1
+    BOOST_CHECK_EQUAL(INI >> 33, 0);                                            // sanity: 5e9 >> 33 == 0
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(32 * H,     INI, TAIL, H), 2);     // halvings=31: 2 sat
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(32 * H + 1, INI, TAIL, H), 1);     // halvings=32: 1 sat (first block)
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * H,     INI, TAIL, H), 1);     // halvings=32: 1 sat (last block)
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * H + 1, INI, TAIL, H), 0);     // halvings=33: 0
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(50 * H,     INI, TAIL, H), 0);     // well past exhaustion: 0
+
+    // Total emission = sum over the ~33 halving intervals of (per-block subsidy * blocks per interval).
+    // Each interval is exactly 1,000,000 blocks; the per-block subsidy is taken from the SAME function
+    // (a representative block of each interval). Must equal 9,999,999,989,000,000 sat = 99,999,999.89 BRVA,
+    // which stays just under the 100,000,000 BRVA nominal cap (the ~0.11 BRVA gap comes from integer
+    // truncation of the right-shifts).
+    int64_t total = 0;
+    int intervals = 0;
+    for (int k = 0; ; ++k) {
+        const int64_t s = BrisviaGetBlockSubsidy(k * H + 1, INI, TAIL, H); // representative of interval k
+        if (s == 0) break;
+        total += s * static_cast<int64_t>(H);
+        ++intervals;
+    }
+    BOOST_CHECK_EQUAL(intervals, 33);                       // k = 0..32
+    BOOST_CHECK_EQUAL(total, 9999999989000000LL);           // 99,999,999.89 BRVA
+    BOOST_CHECK(total < 100000000LL * COIN);                // below the 100M BRVA nominal cap
+}
+
+// ===================== Brisvia: mainnet ASERT half-life (21600 s) propagation =====================
+// FUNCTIONAL proof (requested by the external audit) that the mainnet ASERT half-life of 21600 s (6 h),
+// set only in CBrisviaMainParams (kernel/chainparams.cpp: consensus.nASERTHalfLife = 21600), actually reaches
+// the node's live difficulty computation
+//     GetNextWorkRequired -> GetNextASERTWorkRequired -> GetNextASERTWorkRequiredFromValues -> CalculateASERT
+// and is NOT shadowed by any hardcoded constant anywhere on that path. This goes beyond the math differential
+// and beyond the consensus tripwire (brisvia_consensus_guards_tests): it drives the REAL mainnet params object
+// end to end and checks the nBits sequence the node would demand.
+
+// Independent REFERENCE oracle: a self-contained mirror of the aserti3 formula (CalculateASERT in pow.cpp),
+// taking the half-life as an EXPLICIT argument. Not wired to consensus; used only to compute expected nBits with
+// an arbitrary half-life. The formula itself is already audited (Python oracle, 8160 vectors), so any mismatch
+// against the real path signals a WIRING/propagation bug, not a formula bug.
+static arith_uint256 AsertRefTarget(const arith_uint256& refTarget, int64_t spacing, int64_t timeDiff,
+                                    int64_t heightDiff, const arith_uint256& powLimit, int64_t halfLife)
+{
+    const int64_t exponent = ((timeDiff - spacing * (heightDiff + 1)) * 65536) / halfLife;
+    int64_t shifts = exponent >> 16;
+    const auto frac = uint16_t(exponent);
+    const uint32_t factor = 65536 + ((
+        + 195766423245049ull * frac
+        + 971821376ull * frac * frac
+        + 5127ull * frac * frac * frac
+        + (1ull << 47)
+        ) >> 48);
+    arith_uint512 next512 = arith_uint512::from(refTarget) * factor;
+    arith_uint512 powLimit512 = arith_uint512::from(powLimit);
+    shifts -= 16;
+    if (shifts <= 0) {
+        next512 >>= -shifts;
+    } else {
+        const auto shifted = next512 << shifts;
+        if ((shifted >> shifts) != next512) {
+            next512 = powLimit512;
+        } else {
+            next512 = shifted;
+        }
+    }
+    if (next512 > powLimit512) next512 = powLimit512;
+    arith_uint256 next = arith_uint256::from(next512);
+    if (next == 0) next = arith_uint256(1);
+    else if (next > powLimit) next = powLimit;
+    return next;
+}
+
+// Expected next nBits for a chosen half-life, replicating the anchor math of GetNextASERTWorkRequiredFromValues.
+static uint32_t AsertRefNextBits(const Consensus::Params& p, int prevHeight, int64_t prevTime, int64_t halfLife)
+{
+    const auto& a = *p.asertAnchorParams;
+    arith_uint256 refTarget; refTarget.SetCompact(a.nBits);
+    const arith_uint256 powLimit = UintToArith256(p.powLimit);
+    const int64_t timeDiff = prevTime - a.nPrevBlockTime;
+    const int64_t heightDiff = int64_t(prevHeight) - a.nHeight;
+    return AsertRefTarget(refTarget, p.nPowTargetSpacing, timeDiff, heightDiff, powLimit, halfLife).GetCompact();
+}
+
+BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
+{
+    // REAL mainnet params (no hand-copied constants): the object actually built by CBrisviaMainParams.
+    const auto chain = CChainParams::BrisviaMain();
+    const Consensus::Params& params = chain->GetConsensus();
+
+    // Pin the test to the live mainnet source of truth (fails loudly if any of these drifts).
+    BOOST_REQUIRE(params.asertAnchorParams.has_value());
+    BOOST_REQUIRE(params.fPowRandomX);
+    BOOST_REQUIRE(!params.fPowNoRetargeting);            // mainnet retargets for real -> routes to ASERT
+    BOOST_REQUIRE(!params.fPowAllowMinDifficultyBlocks); // no min-difficulty escape hatch
+    BOOST_CHECK_EQUAL(params.nASERTHalfLife, 21600);     // <-- the value under audit
+    BOOST_CHECK_EQUAL(params.nPowTargetSpacing, 120);
+    BOOST_CHECK_EQUAL(params.asertAnchorParams->nBits, 0x1e7fffffu);
+    BOOST_CHECK_EQUAL(UintToArith256(params.powLimit).GetCompact(), 0x207fffffu);
+
+    const auto& anchor = *params.asertAnchorParams;
+    const int64_t spacing = params.nPowTargetSpacing;   // 120
+    const int64_t t0 = anchor.nPrevBlockTime;           // synthetic parent time = genesisTime - spacing
+    arith_uint256 anchorTarget; anchorTarget.SetCompact(anchor.nBits);
+    const arith_uint256 powLimitTarget = UintToArith256(params.powLimit);
+
+    CBlockHeader pblock; // only read by the (disabled) min-difficulty rule; value is irrelevant on mainnet
+    pblock.nTime = static_cast<uint32_t>(t0 + 1);
+
+    // Drive the REAL top-level consensus entry point (GetNextWorkRequired) AND the pure-values variant, require
+    // they agree, and return the nBits the node would demand for the block after (prevHeight, prevTime).
+    auto nodeNextBits = [&](int prevHeight, int64_t prevTime) -> uint32_t {
+        CBlockIndex prev;
+        prev.nHeight = prevHeight;
+        prev.nTime   = static_cast<uint32_t>(prevTime);
+        const uint32_t viaTop    = GetNextWorkRequired(&prev, &pblock, params);                          // routing proof
+        const uint32_t viaValues = GetNextASERTWorkRequiredFromValues(prevHeight, prevTime, &pblock, params);
+        BOOST_CHECK_EQUAL(viaTop, viaValues);
+        return viaTop;
+    };
+
+    // ---------- (a) blocks at the target pace: difficulty STABLE (target == anchor) ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * spacing; // exactly on schedule -> exponent 0
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        BOOST_CHECK_EQUAL(got, anchor.nBits);                                            // stays at the anchor
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));   // oracle @ 21600
+    }
+
+    // ---------- (b) FAST blocks (60 s each): difficulty UP (target DOWN) ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * 60;      // half the target pace
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target < anchorTarget);                                              // difficulty rose
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        // Propagation: the real path uses 21600, NOT 10800. A longer half-life reacts SOFTER (target moves less).
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target > t10);   // 21600 (real) drops less than a 3 h half-life would
+    }
+
+    // ---------- (c) SLOW blocks (240 s each): difficulty DOWN (target UP), never above powLimit ----------
+    {
+        const int prevHeight = 100;
+        const int64_t prevTime = t0 + int64_t(prevHeight + 1) * 240;     // double the target pace
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target > anchorTarget);                                              // difficulty eased
+        BOOST_CHECK(target <= powLimitTarget);
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target < t10);   // 21600 (real) eases slower than a 3 h half-life would
+    }
+
+    // ---------- (d) STRONG stall (very long interval): strong recovery (target UP a lot) ----------
+    {
+        const int prevHeight = 10;
+        const int64_t onSchedule = t0 + int64_t(prevHeight + 1) * spacing;
+        const int64_t gap = 86400;                                        // a full day with no new blocks
+        const int64_t prevTime = onSchedule + gap;
+        const uint32_t got = nodeNextBits(prevHeight, prevTime);
+        arith_uint256 target; target.SetCompact(got);
+        BOOST_CHECK(target > anchorTarget);
+        // At the 6 h half-life, a 1-day stall from height 10 gives ASERT exponent = 86400/21600 = 4, so the target
+        // rises ~16x (2^4). (With a 3 h half-life it would be ~256x.) Assert a strong recovery (> 8x), not >64x.
+        BOOST_CHECK((target >> 3) > anchorTarget);   // rose ~16x: a strong recovery, not a marginal nudge
+        BOOST_CHECK(target < powLimitTarget);        // not clamped, so the differential below is meaningful
+        BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
+        // The 6 h half-life recovers more slowly than a 3 h one would; 6 h was chosen for stability on a new small network.
+        const uint32_t bits10800 = AsertRefNextBits(params, prevHeight, prevTime, 10800);
+        BOOST_CHECK(got != bits10800);
+        arith_uint256 t10; t10.SetCompact(bits10800);
+        BOOST_CHECK(target < t10);   // 21600 (real) recovers less than a 3 h half-life would
+    }
+}
+
+// Genesis PoW under RandomX (audit blocker CF-13 / C-04). The consensus guards pin the genesis SHA256d id and
+// merkle root, but that does NOT prove the frozen nonce actually satisfies RandomX. A hard-coded genesis never
+// re-traverses PoW at startup, so this proves it explicitly with the REAL mainnet genesis object: the validator
+// runs RandomX over the 80-byte header under the INITIAL launch seed (height 0, no parent) and only returns VALID
+// if the hash meets target(genesisBits). If the mined nonce were wrong, mainnet could not produce a valid genesis.
+BOOST_AUTO_TEST_CASE(mainnet_genesis_randomx_pow)
+{
+    const auto chain = CChainParams::BrisviaMain();
+    const Consensus::Params& params = chain->GetConsensus();
+    const CBlock& genesis = chain->GenesisBlock();
+    BOOST_REQUIRE(params.fPowRandomX);
+    uint256 powHash;
+    const PoWCheckResult r = CheckRandomXProofOfWorkContextual(genesis, /*pindexPrev=*/nullptr, /*nHeight=*/0, params, &powHash);
+    BOOST_CHECK_EQUAL(static_cast<int>(r), static_cast<int>(PoWCheckResult::VALID));
+    BOOST_CHECK(!powHash.IsNull());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -63,6 +63,12 @@ BOOST_AUTO_TEST_CASE(mainnet_genesis_frozen)
     BOOST_REQUIRE(c.asertAnchorParams.has_value());
     BOOST_CHECK_EQUAL(c.asertAnchorParams->nHeight, 0);
     BOOST_CHECK_EQUAL(c.asertAnchorParams->nBits, 0x1e7fffffu);
+    // Anchor consistency (audit finding F-06): the anchor bits equal the genesis bits, and its synthetic
+    // parent sits exactly one spacing (120 s) before the genesis time. This makes the ASERT exponent for
+    // block 1 exactly zero, so block 1 keeps the anchor difficulty. A drift here would silently change the
+    // whole difficulty schedule from height 1.
+    BOOST_CHECK_EQUAL(c.asertAnchorParams->nBits, genesis.nBits);
+    BOOST_CHECK_EQUAL(c.asertAnchorParams->nPrevBlockTime, int64_t(genesis.nTime) - c.nPowTargetSpacing);
 }
 
 // Guard 3: RandomX PoW is active on mainnet. If this flips to false, the chain would fall
@@ -90,9 +96,9 @@ BOOST_AUTO_TEST_CASE(difficulty_flags)
     BOOST_CHECK_EQUAL(c.nASERTHalfLife, 21600);
 }
 
-// Guard 5: network identity. Magic bytes "BRV1", P2P port 9333, RPC port 9332 and datadir
-// "brisvia-mainnet". These keep the mainnet isolated from Bitcoin and from the Brisvia
-// testnet; a collision here would let foreign peers/messages cross networks.
+// Guard 5: network identity. Magic bytes "BRV1", P2P port 9339, RPC port 9338 and datadir
+// "brisvia-mainnet". These keep the mainnet isolated from Bitcoin, from the Brisvia testnet and
+// from Litecoin (which uses 9333/9332); a collision here would let foreign peers/messages cross networks.
 BOOST_AUTO_TEST_CASE(network_identity)
 {
     const auto params = CChainParams::BrisviaMain();
@@ -101,10 +107,10 @@ BOOST_AUTO_TEST_CASE(network_identity)
     BOOST_CHECK_EQUAL(magic[1], 0x52); // 'R'
     BOOST_CHECK_EQUAL(magic[2], 0x56); // 'V'
     BOOST_CHECK_EQUAL(magic[3], 0x31); // '1'  -> "BRV1"
-    BOOST_CHECK_EQUAL(params->GetDefaultPort(), 9333);
+    BOOST_CHECK_EQUAL(params->GetDefaultPort(), 9339);
 
     const auto base = CreateBaseChainParams(ChainType::BRISVIA_MAIN);
-    BOOST_CHECK_EQUAL(base->RPCPort(), 9332);
+    BOOST_CHECK_EQUAL(base->RPCPort(), 9338);
     BOOST_CHECK_EQUAL(base->DataDir(), "brisvia-mainnet");
 }
 

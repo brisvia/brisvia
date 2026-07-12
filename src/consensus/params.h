@@ -159,7 +159,7 @@ struct Params {
     bool fPowRandomX{false};
     /** ASERT active from this height (Brisvia: 1, from the first block). */
     int nASERTActivationHeight{0};
-    /** ASERT half-life in seconds (Brisvia: 21600 = 6 h, provisional). */
+    /** ASERT half-life in seconds (Brisvia: 21600 = 6 h on both mainnet and testnet). */
     int64_t nASERTHalfLife{0};
     /** ASERT anchor. Brisvia uses the genesis with a "synthetic parent": nPrevBlockTime = genesis.nTime - spacing. */
     struct ASERTAnchor { int nHeight; uint32_t nBits; int64_t nPrevBlockTime; };
