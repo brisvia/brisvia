@@ -869,12 +869,13 @@ public:
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
 
-        // Own network identity: magic BRV1, port 9333.
+        // Own network identity: magic BRV1, P2P port 9339 (RPC 9338). Own port, distinct from Litecoin's
+        // 9333/9332 to avoid operational collisions; 9339 also matches Brisvia's SLIP-44 coin type.
         pchMessageStart[0] = 0x42; // 'B'
         pchMessageStart[1] = 0x52; // 'R'
         pchMessageStart[2] = 0x56; // 'V'
         pchMessageStart[3] = 0x31; // '1'  ->  "BRV1" (does not collide with Bitcoin nor with the Brisvia testnet "BRT1")
-        nDefaultPort = 9333;
+        nDefaultPort = 9339;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
