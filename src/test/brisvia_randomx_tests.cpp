@@ -1083,7 +1083,9 @@ BOOST_AUTO_TEST_CASE(mainnet_asert_halflife_propagation)
         const uint32_t got = nodeNextBits(prevHeight, prevTime);
         arith_uint256 target; target.SetCompact(got);
         BOOST_CHECK(target > anchorTarget);
-        BOOST_CHECK((target >> 6) > anchorTarget);   // rose > 64x: a strong recovery, not a marginal nudge
+        // At the 6 h half-life, a 1-day stall from height 10 gives ASERT exponent = 86400/21600 = 4, so the target
+        // rises ~16x (2^4). (With a 3 h half-life it would be ~256x.) Assert a strong recovery (> 8x), not >64x.
+        BOOST_CHECK((target >> 3) > anchorTarget);   // rose ~16x: a strong recovery, not a marginal nudge
         BOOST_CHECK(target < powLimitTarget);        // not clamped, so the differential below is meaningful
         BOOST_CHECK_EQUAL(got, AsertRefNextBits(params, prevHeight, prevTime, 21600));
         // The 6 h half-life recovers more slowly than a 3 h one would; 6 h was chosen for stability on a new small network.
