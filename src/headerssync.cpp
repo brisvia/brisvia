@@ -163,11 +163,6 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
 // on the CPU cost per iteration of the message thread: with RandomX each header costs ~10-30 ms, so 32 bounds the
 // thread stall. The rest of the message is drained with ContinuePendingHeaders(), yielding control between iterations.
 static constexpr size_t BRISVIA_MAX_RANDOMX_PER_QUANTUM = 32;
-// Brisvia: ALSO cap the wall-clock time spent per quantum on the message thread. RandomX per header varies
-// (10-30 ms, more while a cache is (re)built), so a fixed count of 32 could still stall P2P for ~1 s in the
-// worst case. The quantum ends when EITHER bound (count OR time) is reached; the rest drains via
-// ContinuePendingHeaders(), yielding the thread. Prevents a hostile/slow peer from monopolising the message thread.
-static constexpr std::chrono::milliseconds BRISVIA_MAX_QUANTUM_TIME{100};
 
 HeadersSyncState::ProcessingResult HeadersSyncState::ContinuePendingHeaders()
 {
@@ -189,7 +184,6 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
 
     // Brisvia: the RandomX rejection cause is per-quantum; it is reset here and set by BrisviaCheckHeaderRandomX.
     m_last_randomx_reject.reset();
-    const auto quantum_start = SteadyClock::now();
 
     const size_t total = m_pending_headers.size();
     const size_t quantum_end = (m_pending_pos + BRISVIA_MAX_RANDOMX_PER_QUANTUM < total)
@@ -210,8 +204,6 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
                 Finalize();
                 return ret; // success=false
             }
-            // Time budget: this header succeeded; stop the quantum early if we already spent too long (count OR time).
-            if (SteadyClock::now() - quantum_start >= BRISVIA_MAX_QUANTUM_TIME) { ++m_pending_pos; break; }
         }
         ret.success = true;
         if (m_pending_pos < total) {
@@ -233,8 +225,6 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPendingQuantum()
                 Finalize();
                 return ret; // success=false
             }
-            // Time budget: this header succeeded; stop the quantum early if we already spent too long (count OR time).
-            if (SteadyClock::now() - quantum_start >= BRISVIA_MAX_QUANTUM_TIME) { ++m_pending_pos; break; }
         }
         ret.success = true;
         if (m_pending_pos < total) {
