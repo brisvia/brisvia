@@ -753,13 +753,13 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_testnet_genesis)
 // Mines the CANONICAL GENESIS of the Brisvia MAINNET (ChainType::BRISVIA_MAIN). Same mechanics as the testnet:
 //  - real mainnet launch nTime (1 Aug 2026 12:00 ART = 15:00 UTC = Unix 1785596400).
 //  - genesis phrase in English (fair launch, no premine).
-//  - mainnet's own anchor 0xB3 (testnet uses 0xB2) + initial nBits 0x1e7fffff (ASERT anchor).
+//  - mainnet's own anchor 0xB3 (testnet uses 0xB2) + initial nBits 0x1e0fffff (ASERT anchor).
 // Prints the values to freeze in CBrisviaMainParams.
 BOOST_AUTO_TEST_CASE(mine_brisvia_mainnet_genesis)
 {
     const char* pszTimestamp = "No privilege at genesis: an open network, mined and sustained by the people.";
     uint256 seed; std::memset(seed.begin(), 0x54, 32);  // initial RandomX seed (same as testnet)
-    const uint32_t nBits = 0x1e7fffff;
+    const uint32_t nBits = 0x1e0fffff;
     const uint32_t nTime = 1785596400;                  // 2026-08-01 15:00:00 UTC (1 Aug 12:00 ART)
 
     Consensus::Params params{};
@@ -784,15 +784,15 @@ BOOST_AUTO_TEST_CASE(mine_brisvia_mainnet_genesis)
     BOOST_CHECK(UintToArith256(powHash) <= target);
 
     // FROZEN values of the mainnet canonical genesis (regression).
-    BOOST_CHECK_EQUAL(genesis.nNonce, 90424u);
+    BOOST_CHECK_EQUAL(genesis.nNonce, 79118u);
     BOOST_CHECK_EQUAL(genesis.GetHash().GetHex(),
-                      "7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff");
+                      "aa6bc268339aa9f4f2e39ae33aca7b7e48e395033d08d37c08f828890af7baf7");
     BOOST_CHECK_EQUAL(genesis.hashMerkleRoot.GetHex(),
                       "c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d");
 
     BOOST_TEST_MESSAGE("=== CANONICAL GENESIS mainnet Brisvia (values for chainparams) ===");
     BOOST_TEST_MESSAGE("nTime      = " << genesis.nTime);
-    BOOST_TEST_MESSAGE("nBits      = 0x1e7fffff");
+    BOOST_TEST_MESSAGE("nBits      = 0x1e0fffff");
     BOOST_TEST_MESSAGE("nNonce     = " << genesis.nNonce);
     BOOST_TEST_MESSAGE("merkleRoot = " << genesis.hashMerkleRoot.GetHex());
     BOOST_TEST_MESSAGE("blockID    = " << genesis.GetHash().GetHex());

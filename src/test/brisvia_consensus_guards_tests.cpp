@@ -50,19 +50,19 @@ BOOST_AUTO_TEST_CASE(mainnet_genesis_frozen)
     const CBlock& genesis = params->GenesisBlock();
 
     BOOST_CHECK_EQUAL(c.hashGenesisBlock.GetHex(),
-                      "7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff");
+                      "aa6bc268339aa9f4f2e39ae33aca7b7e48e395033d08d37c08f828890af7baf7");
     BOOST_CHECK_EQUAL(genesis.GetHash().GetHex(),
-                      "7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff");
+                      "aa6bc268339aa9f4f2e39ae33aca7b7e48e395033d08d37c08f828890af7baf7");
     BOOST_CHECK_EQUAL(genesis.hashMerkleRoot.GetHex(),
                       "c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d");
     BOOST_CHECK_EQUAL(genesis.nTime, 1785596400u);   // 2026-08-01 15:00:00 UTC (Aug 1, 12:00 ART)
-    BOOST_CHECK_EQUAL(genesis.nNonce, 90424u);
-    BOOST_CHECK_EQUAL(genesis.nBits, 0x1e7fffffu);
+    BOOST_CHECK_EQUAL(genesis.nNonce, 79118u);
+    BOOST_CHECK_EQUAL(genesis.nBits, 0x1e0fffffu);
 
     // The ASERT anchor must ride on the genesis bits/height (difficulty seed of the network).
     BOOST_REQUIRE(c.asertAnchorParams.has_value());
     BOOST_CHECK_EQUAL(c.asertAnchorParams->nHeight, 0);
-    BOOST_CHECK_EQUAL(c.asertAnchorParams->nBits, 0x1e7fffffu);
+    BOOST_CHECK_EQUAL(c.asertAnchorParams->nBits, 0x1e0fffffu);
 }
 
 // Guard 3: RandomX PoW is active on mainnet. If this flips to false, the chain would fall
