@@ -882,13 +882,13 @@ public:
         // CANONICAL mainnet genesis: real launch date (Aug 1 2026 12:00 ART) + English phrase (fair launch) +
         // ASERT anchor nBits. Values from test mine_brisvia_mainnet_genesis.
         unsigned char anchor[32]; std::memset(anchor, 0xB3, sizeof(anchor)); // mainnet's own anchor (the testnet uses 0xB2)
-        const uint32_t genesisTime = 1785596400, genesisNonce = 90424, genesisBits = 0x1e7fffff;
+        const uint32_t genesisTime = 1785596400, genesisNonce = 79118, genesisBits = 0x1e0fffff;
         genesis = CreateBrisviaGenesisBlock("No privilege at genesis: an open network, mined and sustained by the people.", anchor,
                                             genesisTime, genesisNonce, genesisBits, 1);
         consensus.hashGenesisBlock = genesis.GetHash();
         consensus.asertAnchorParams = Consensus::Params::ASERTAnchor{
             /*nHeight=*/0, /*nBits=*/genesisBits, /*nPrevBlockTime=*/int64_t(genesisTime) - consensus.nPowTargetSpacing};
-        assert(consensus.hashGenesisBlock == uint256{"7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff"});
+        assert(consensus.hashGenesisBlock == uint256{"aa6bc268339aa9f4f2e39ae33aca7b7e48e395033d08d37c08f828890af7baf7"});
         assert(genesis.hashMerkleRoot == uint256{"c17012d733986f74e43d3a2852646e44c5d3fc9f0b45d165ac8998d96b6eb98d"});
 
         // Fixed seed nodes so a fresh node can discover the network without a manual -addnode.
