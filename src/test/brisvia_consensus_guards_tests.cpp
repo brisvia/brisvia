@@ -16,11 +16,16 @@
 #include <primitives/block.h>
 #include <uint256.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
+#include <tinyformat.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 BOOST_AUTO_TEST_SUITE(brisvia_consensus_guards_tests)
 
@@ -154,6 +159,62 @@ BOOST_AUTO_TEST_CASE(clean_start_no_inherited_checkpoints)
     const Consensus::Params& c = params->GetConsensus();
     BOOST_CHECK_MESSAGE(c.nMinimumChainWork.IsNull(), "nMinimumChainWork must be empty (fresh chain)");
     BOOST_CHECK_MESSAGE(c.defaultAssumeValid.IsNull(), "defaultAssumeValid must be empty (fresh chain)");
+}
+
+// Guard: the compiled bootstrap list. There is no DNS seed on mainnet (vSeeds is empty), so vFixedSeeds
+// is the ONLY way a fresh client finds the network. A missing address is a seed node nobody can reach; an
+// empty list is a launch where no client ever connects to anything.
+//
+// This decodes what the BINARY actually carries, not what chainparamsseeds.h looks like: on 2026-07-15 the
+// source listed two of the three seed nodes and the third (Oracle-2) was invisible to every client. It also
+// pins the port, because a testnet address or a wrong port here fails exactly the same way — silently, and
+// only on launch day.
+BOOST_AUTO_TEST_CASE(mainnet_fixed_seeds_are_the_three_seed_nodes)
+{
+    const auto params = CChainParams::BrisviaMain();
+    const std::vector<uint8_t>& raw = params->FixedSeeds();
+
+    // Serialised form, one entry per 8 bytes: 0x01 (IPv4), 0x04 (len), 4 IP bytes, 2 port bytes big-endian.
+    BOOST_REQUIRE_MESSAGE(!raw.empty(), "mainnet has NO fixed seeds: a fresh client would find nobody");
+    BOOST_REQUIRE_MESSAGE(raw.size() % 8 == 0, "fixed seed list is not a whole number of IPv4 entries");
+
+    std::vector<std::string> got;
+    for (size_t i = 0; i + 8 <= raw.size(); i += 8) {
+        BOOST_CHECK_MESSAGE(raw[i] == 0x01 && raw[i + 1] == 0x04, "entry is not IPv4 (0x01,0x04)");
+        const uint16_t port = static_cast<uint16_t>((raw[i + 6] << 8) | raw[i + 7]);
+        got.push_back(strprintf("%d.%d.%d.%d:%d", raw[i + 2], raw[i + 3], raw[i + 4], raw[i + 5], port));
+    }
+
+    const std::vector<std::string> expected{
+        "187.77.240.145:9333",   // Hostinger
+        "129.80.250.36:9333",    // Oracle-1
+        "129.159.108.102:9333",  // Oracle-2
+    };
+
+    BOOST_CHECK_MESSAGE(got.size() == expected.size(),
+                        strprintf("mainnet must ship exactly %d fixed seeds, found %d", expected.size(), got.size()));
+    for (const auto& want : expected) {
+        BOOST_CHECK_MESSAGE(std::find(got.begin(), got.end(), want) != got.end(),
+                            strprintf("seed node %s is missing from the compiled list: no client can reach it", want));
+    }
+    // No duplicates, and nothing from another network sneaking in on the mainnet port.
+    std::vector<std::string> uniq = got;
+    std::sort(uniq.begin(), uniq.end());
+    uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+    BOOST_CHECK_MESSAGE(uniq.size() == got.size(), "the fixed seed list has duplicate addresses");
+    for (const auto& g : got) {
+        BOOST_CHECK_MESSAGE(g.find(":9333") != std::string::npos,
+                            strprintf("fixed seed %s is not on the mainnet port 9333", g));
+    }
+}
+
+// The testnet list must never leak into the mainnet build, and vice versa.
+BOOST_AUTO_TEST_CASE(mainnet_and_testnet_fixed_seeds_are_different)
+{
+    const auto main = CChainParams::BrisviaMain();
+    const auto tnet = CChainParams::BrisviaTestNet();
+    BOOST_CHECK_MESSAGE(main->FixedSeeds() != tnet->FixedSeeds(),
+                        "mainnet and testnet ship the SAME fixed seeds: one of the two builds is wrong");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
