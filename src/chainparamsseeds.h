@@ -1338,11 +1338,11 @@ static const uint8_t chainparams_seed_brisvia_test[] = {
 
 // Bootstrap addresses for a fresh client. There is no DNS seed (vSeeds is empty), so THIS LIST IS THE
 // ONLY WAY a new node finds the network: every address that is missing here is a seed node no client can
-// reach on its own. Format: 0x01 (IPv4), 0x04 (length), 4 IP bytes, 2 port bytes big-endian (0x2475 = 9333).
+// reach on its own. Format: 0x01 (IPv4), 0x04 (length), 4 IP bytes, 2 port bytes big-endian (0x247e = 9342).
 // Kept in sync with brisvia_fixed_seeds_tests, which decodes this array and demands these exact three.
 static const uint8_t chainparams_seed_brisvia_main[] = {
-    0x01,0x04,0xbb,0x4d,0xf0,0x91,0x24,0x75,  // 187.77.240.145:9333  (Hostinger)
-    0x01,0x04,0x81,0x50,0xfa,0x24,0x24,0x75,  // 129.80.250.36:9333   (Oracle-1)
-    0x01,0x04,0x81,0x9f,0x6c,0x66,0x24,0x75,  // 129.159.108.102:9333 (Oracle-2)
+    0x01,0x04,0xbb,0x4d,0xf0,0x91,0x24,0x7e,  // 187.77.240.145:9342  (Hostinger)
+    0x01,0x04,0x81,0x50,0xfa,0x24,0x24,0x7e,  // 129.80.250.36:9342   (Oracle-1)
+    0x01,0x04,0x81,0x9f,0x6c,0x66,0x24,0x7e,  // 129.159.108.102:9342 (Oracle-2)
 };
 #endif // BITCOIN_CHAINPARAMSSEEDS_H

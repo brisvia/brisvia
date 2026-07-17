@@ -1,4 +1,5 @@
-# Fixed seed nodes for the Brisvia main network (BRISVIA_MAIN, port 9333).
+# Fixed seed nodes for the Brisvia main network (BRISVIA_MAIN, port 9342).
 # These bootstrap peers let a fresh node discover the network without manual -addnode.
-187.77.240.145:9333
-129.80.250.36:9333
+187.77.240.145:9342
+129.80.250.36:9342
+129.159.108.102:9342

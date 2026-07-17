@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(difficulty_flags)
     BOOST_CHECK_EQUAL(c.nASERTHalfLife, 21600);
 }
 
-// Guard 5: network identity. Magic bytes "BRV1", P2P port 9333, RPC port 9332 and datadir
+// Guard 5: network identity. Magic bytes "BRV1", P2P port 9342, RPC port 9338 and datadir
 // "brisvia-mainnet". These keep the mainnet isolated from Bitcoin and from the Brisvia
 // testnet; a collision here would let foreign peers/messages cross networks.
 BOOST_AUTO_TEST_CASE(network_identity)
@@ -106,10 +106,10 @@ BOOST_AUTO_TEST_CASE(network_identity)
     BOOST_CHECK_EQUAL(magic[1], 0x52); // 'R'
     BOOST_CHECK_EQUAL(magic[2], 0x56); // 'V'
     BOOST_CHECK_EQUAL(magic[3], 0x31); // '1'  -> "BRV1"
-    BOOST_CHECK_EQUAL(params->GetDefaultPort(), 9333);
+    BOOST_CHECK_EQUAL(params->GetDefaultPort(), 9342);
 
     const auto base = CreateBaseChainParams(ChainType::BRISVIA_MAIN);
-    BOOST_CHECK_EQUAL(base->RPCPort(), 9332);
+    BOOST_CHECK_EQUAL(base->RPCPort(), 9338);
     BOOST_CHECK_EQUAL(base->DataDir(), "brisvia-mainnet");
 }
 
@@ -186,9 +186,9 @@ BOOST_AUTO_TEST_CASE(mainnet_fixed_seeds_are_the_three_seed_nodes)
     }
 
     const std::vector<std::string> expected{
-        "187.77.240.145:9333",   // Hostinger
-        "129.80.250.36:9333",    // Oracle-1
-        "129.159.108.102:9333",  // Oracle-2
+        "187.77.240.145:9342",   // Hostinger
+        "129.80.250.36:9342",    // Oracle-1
+        "129.159.108.102:9342",  // Oracle-2
     };
 
     BOOST_CHECK_MESSAGE(got.size() == expected.size(),
@@ -203,8 +203,8 @@ BOOST_AUTO_TEST_CASE(mainnet_fixed_seeds_are_the_three_seed_nodes)
     uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
     BOOST_CHECK_MESSAGE(uniq.size() == got.size(), "the fixed seed list has duplicate addresses");
     for (const auto& g : got) {
-        BOOST_CHECK_MESSAGE(g.find(":9333") != std::string::npos,
-                            strprintf("fixed seed %s is not on the mainnet port 9333", g));
+        BOOST_CHECK_MESSAGE(g.find(":9342") != std::string::npos,
+                            strprintf("fixed seed %s is not on the mainnet port 9342", g));
     }
 }
 
