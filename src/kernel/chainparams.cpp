@@ -814,7 +814,7 @@ public:
 
 /**
  * Brisvia MAINNET (ChainType::BRISVIA_MAIN): the MAIN Brisvia network (real money). Fully own network identity,
- * separate from Bitcoin and from the Brisvia testnet (magic BRV1, port 9333, own datadir/RPC and
+ * separate from Bitcoin and from the Brisvia testnet (magic BRV1, port 9342, own datadir/RPC and
  * own bech32 "brv" prefix). PoW RandomX + finite Bitcoin-style emission (50 BRVA/block, halving every
  * 1,000,000 blocks, no tail, 100M cap) + ASERT. Selected with -chain=brisvia.
  */
@@ -869,12 +869,12 @@ public:
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
 
-        // Own network identity: magic BRV1, port 9333.
+        // Own network identity: magic BRV1, P2P port 9342 (own port; avoids Litecoin's 9333/9332).
         pchMessageStart[0] = 0x42; // 'B'
         pchMessageStart[1] = 0x52; // 'R'
         pchMessageStart[2] = 0x56; // 'V'
         pchMessageStart[3] = 0x31; // '1'  ->  "BRV1" (does not collide with Bitcoin nor with the Brisvia testnet "BRT1")
-        nDefaultPort = 9333;
+        nDefaultPort = 9342;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
