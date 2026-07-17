@@ -14,6 +14,12 @@ Bitcoin's UTXO model and transparency, and replaces the SHA-256 Proof-of-Work wi
 The goal is simple: keep mining in the hands of ordinary people. RandomX is optimised for general-purpose
 CPUs and is resistant to ASIC and GPU farms, so anyone with a normal computer can take part.
 
+> **Most people don't need to build anything.** The
+> [Brisvia Miner desktop app](https://github.com/brisvia/brisvia-desktop) bundles the wallet, node and miner
+> in a single one-click program for Windows, macOS and Linux — download it from
+> [brisvia.com](https://brisvia.com). This repository holds the node and consensus code, for developers and
+> node operators. The main network launches on **August 1, 2026 at 15:00 UTC**.
+
 Key parameters
 --------------
 
