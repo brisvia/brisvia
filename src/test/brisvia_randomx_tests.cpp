@@ -837,6 +837,46 @@ BOOST_AUTO_TEST_CASE(brisvia_emission)
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(100000, INI, TAIL, H), TAIL);     // perpetual tail
 }
 
+// Brisvia MAINNET emission: sum the WHOLE real schedule with the ACTUAL mainnet consensus params
+// (50 BRVA, halving every 1,000,000, no tail) and confirm the finite total is exactly 99,999,999.89 BRVA
+// and never exceeds MAX_MONEY. Catches both an emission-function regression and a params regression.
+BOOST_AUTO_TEST_CASE(brisvia_mainnet_emission_total)
+{
+    const auto params = CChainParams::BrisviaMain();
+    const Consensus::Params& c = params->GetConsensus();
+
+    // The real mainnet emission parameters must be exactly these.
+    BOOST_CHECK_EQUAL(c.nBrisviaInitialSubsidy, 50 * COIN);
+    BOOST_CHECK_EQUAL(c.nBrisviaTailSubsidy, 0);
+    BOOST_CHECK_EQUAL(c.nSubsidyHalvingInterval, 1000000);
+
+    const int64_t INI = c.nBrisviaInitialSubsidy;
+    const int64_t TAIL = c.nBrisviaTailSubsidy;
+    const int64_t H = c.nSubsidyHalvingInterval;
+
+    // Edges of the real schedule.
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(0, INI, TAIL, H), 0);                       // genesis: no premine
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1, INI, TAIL, H), 50 * COIN);               // first block: 50
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(static_cast<int>(H), INI, TAIL, H), 50 * COIN);      // last of the initial stretch
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(static_cast<int>(H) + 1, INI, TAIL, H), 25 * COIN);  // 1st halving -> 25
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H), INI, TAIL, H), 0);         // last coins by ~block 33M
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H) + 1, INI, TAIL, H), 0);     // finished: 0 from here on
+
+    // Sum the full schedule. Each era spans exactly H blocks with a constant subsidy, so evaluate once per
+    // era at its first height and multiply. Emission is finite (tail 0), so it stops when the subsidy hits 0.
+    int64_t total = 0;
+    for (int era = 0; era < 64; ++era) {
+        const int h = static_cast<int>(static_cast<int64_t>(era) * H + 1);
+        const int64_t s = BrisviaGetBlockSubsidy(h, INI, TAIL, H);
+        BOOST_REQUIRE(s >= 0);
+        total += s * H;
+        BOOST_REQUIRE(total <= MAX_MONEY);   // the cap is never exceeded at any point of the schedule
+    }
+    // Exact finite total (the 0.11 BRVA gap vs 100M is the integer truncation of the halvings).
+    BOOST_CHECK_EQUAL(total, 9999999989000000LL);   // 99,999,999.89 BRVA
+    BOOST_CHECK(total <= MAX_MONEY);                 // MAX_MONEY = 100,000,000 BRVA
+}
+
 // Network config: the Brisvia regtest (brisvia_pow option) gets RandomX PoW + emission + ASERT anchor +
 // frozen mined genesis + brvrt prefix; the Bitcoin regtest (brisvia_pow=false) stays intact.
 BOOST_AUTO_TEST_CASE(brisvia_regtest_chainparams)
