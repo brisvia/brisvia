@@ -859,8 +859,8 @@ BOOST_AUTO_TEST_CASE(brisvia_mainnet_emission_total)
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(1, INI, TAIL, H), 50 * COIN);               // first block: 50
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(static_cast<int>(H), INI, TAIL, H), 50 * COIN);      // last of the initial stretch
     BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(static_cast<int>(H) + 1, INI, TAIL, H), 25 * COIN);  // 1st halving -> 25
-    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H), INI, TAIL, H), 0);         // last coins by ~block 33M
-    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H) + 1, INI, TAIL, H), 0);     // finished: 0 from here on
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H), INI, TAIL, H), 1);         // last paid block (~33M): 1 sat (50 BRVA >> 32)
+    BOOST_CHECK_EQUAL(BrisviaGetBlockSubsidy(33 * static_cast<int>(H) + 1, INI, TAIL, H), 0);     // finished: 0 from here on (>> 33)
 
     // Sum the full schedule. Each era spans exactly H blocks with a constant subsidy, so evaluate once per
     // era at its first height and multiply. Emission is finite (tail 0), so it stops when the subsidy hits 0.
