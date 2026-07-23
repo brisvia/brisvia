@@ -34,10 +34,10 @@ Key parameters
 | Emission             | Finite, no tail (Bitcoin-style): 50 → 25 → 12.5 → … → 0        |
 | Maximum supply       | 100,000,000 BRVA                                               |
 | Premine              | 0% — the genesis block has no spendable reward                 |
-| P2P port (mainnet)   | 9333                                                          |
+| P2P port (mainnet)   | 9342                                                          |
 | Network magic        | BRV1                                                          |
 | Address prefix       | bech32 `brv` (brv1... addresses)                              |
-| Genesis hash         | 7f1cf9cfc74095157a6a56f1de75034f0ac514aadffb507040c0351a4db4c1ff |
+| Genesis hash         | aa6bc268339aa9f4f2e39ae33aca7b7e48e395033d08d37c08f828890af7baf7 |
 
 Emission is finite and predictable. The block reward halves every 1,000,000 blocks with no perpetual tail,
 so the total supply converges to exactly 100 million BRVA, with the last coins mined around block 33,000,000.

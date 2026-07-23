@@ -142,7 +142,7 @@ config/firewall (both the OS iptables and the Oracle Cloud security list), and t
 
 **Verified at the source level (2026-07-17):** genesis params + hash, ASERT 6 h, emission (no premine, 50/1M,
 finite, 100M cap), magic/ports/hrp/base58, coin_type, no inherited Bitcoin chainwork/assumevalid/checkpoints,
-IsTestChain, provenance (core SHA + RandomX SHA + genesis guard). ChatGPT verdict: **consensus approved; 1.0.7
+IsTestChain, provenance (core SHA + RandomX SHA + genesis guard). Review verdict: **consensus approved; 1.0.7
 needs no consensus correction.**
 
 **Recommended additional evidence (run against the compiled node, not just the source):** ASERT vectors on both
