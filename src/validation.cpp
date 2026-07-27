@@ -2024,7 +2024,23 @@ bool ChainstateManager::IsInitialBlockDownload() const
     if (chain.Tip()->nChainWork < MinimumChainWork()) {
         return true;
     }
-    if (chain.Tip()->Time() < Now<NodeSeconds>() - m_options.max_tip_age) {
+    // Brisvia mainnet launch exception: while the active chain contains only
+    // the genesis block (height 0) and the local clock has reached the genesis
+    // timestamp (== T0), do not remain in IBD solely because the genesis tip is
+    // older than max_tip_age. Otherwise, if block 1 is not mined within
+    // max_tip_age (24 h), fresh or restarted nodes would keep reporting IBD and
+    // getblocktemplate would refuse to build the first block, so the network
+    // could never start. This bypasses ONLY the local tip-age heuristic and
+    // ONLY at height 0; loading state, minimum chain work, block validation,
+    // consensus rules, and every height from 1 onward remain unchanged.
+    // max_tip_age is a local heuristic, not consensus, so block validity, PoW,
+    // difficulty, timestamps, the genesis block and emission are unaffected.
+    const bool skip_tip_age_at_brisvia_genesis =
+        GetParams().GetChainType() == ChainType::BRISVIA_MAIN &&
+        chain.Height() == 0 &&
+        Now<NodeSeconds>() >= chain.Tip()->Time();
+    if (!skip_tip_age_at_brisvia_genesis &&
+        chain.Tip()->Time() < Now<NodeSeconds>() - m_options.max_tip_age) {
         return true;
     }
     LogInfo("Leaving InitialBlockDownload (latching to false)");
