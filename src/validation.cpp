@@ -4226,6 +4226,20 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
  *  v0.12 and v0.15 (when no additional protection was in place) whereby an attacker could unboundedly
  *  grow our in-memory block index. See https://bitcoincore.org/en/2024/07/03/disclose-header-spam.
  */
+
+// Brisvia fair-launch: is this a post-genesis block that must not be accepted yet because
+// the local clock has not reached the launch time T0 (== the genesis timestamp)? Mainnet
+// only, clock-based (like the standard future-time rule). Shared by the header-acceptance
+// path (ContextualCheckBlockHeader) and the block-body path (AcceptBlock) so that a header
+// pre-accepted by a build without the barrier cannot let its body connect before T0. It is
+// not a permanent invalidity: callers return BLOCK_TIME_FUTURE, so the same object is
+// accepted when re-presented at or after T0.
+static bool BrisviaPostGenesisBeforeLaunch(const CChainParams& params, int height, NodeClock::time_point now)
+{
+    const NodeSeconds launch_time{std::chrono::seconds{params.GenesisBlock().nTime}};
+    return params.GetChainType() == ChainType::BRISVIA_MAIN && height >= 1 && now < launch_time;
+}
+
 // Brisvia: fCheckPOW WITHOUT a default value, on purpose: it forces every caller to declare it
 // explicitly and lets the compiler audit that no acceptance path omits RandomX by accident.
 static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool fCheckPOW) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
@@ -4254,22 +4268,17 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
 
     const auto now{NodeClock::now()};
-    const CChainParams& chain_params{chainman.GetParams()};
-    const NodeSeconds brisvia_launch_time{std::chrono::seconds{chain_params.GenesisBlock().nTime}};
 
-    // Brisvia fair-launch acceptance barrier (mainnet only): reject every
-    // post-genesis block while the local node clock is still before T0 (== the
-    // genesis timestamp). The normal future-time allowance (MAX_FUTURE_BLOCK_TIME,
-    // 2h) would otherwise let block 1 -- whose minimum valid timestamp is forced
-    // by MTP to be T0+1 -- be accepted up to ~2h before T0, letting a modified
-    // miner front-run the fair launch. This is a temporary, clock-based rejection
-    // (BLOCK_TIME_FUTURE, NOT a permanent invalidity): the same block becomes
-    // acceptable when re-presented at or after T0. It prevents pre-launch
-    // ACCEPTANCE by updated honest nodes; it cannot prove when the RandomX work
-    // was computed, so it does not by itself prevent private pre-computation.
-    if (chain_params.GetChainType() == ChainType::BRISVIA_MAIN &&
-        nHeight >= 1 &&
-        now < brisvia_launch_time) {
+    // Brisvia fair-launch acceptance barrier (mainnet only): reject every post-genesis
+    // block header while the local node clock is still before T0. The normal future-time
+    // allowance (MAX_FUTURE_BLOCK_TIME, 2h) would otherwise let block 1 -- whose minimum
+    // valid timestamp is forced by MTP to be T0+1 -- be accepted up to ~2h before T0,
+    // letting a modified miner front-run the fair launch. Temporary, clock-based rejection
+    // (BLOCK_TIME_FUTURE): the same block becomes acceptable at or after T0. It prevents
+    // pre-launch ACCEPTANCE by updated honest nodes; it cannot prove when the RandomX work
+    // was computed, so it does not by itself prevent private pre-computation. Shares the
+    // exact condition with the AcceptBlock body barrier via BrisviaPostGenesisBeforeLaunch.
+    if (BrisviaPostGenesisBeforeLaunch(chainman.GetParams(), nHeight, now)) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "brisvia-before-launch",
                              "post-genesis block received before Brisvia mainnet launch");
     }
@@ -4491,6 +4500,17 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
 
     if (!accepted_header)
         return false;
+
+    // Brisvia fair-launch body barrier: an older build (without the barrier) may have
+    // already accepted and persisted this block's HEADER; AcceptBlockHeader above then
+    // returns the existing CBlockIndex WITHOUT re-running ContextualCheckBlockHeader, so the
+    // block BODY must be gated here too. Placed before fAlreadyHave and before any validation
+    // path that calls InvalidBlockFound, so the rejection stays temporary (BLOCK_TIME_FUTURE,
+    // never BLOCK_FAILED_VALID) and the same body is accepted when re-presented at or after T0.
+    if (BrisviaPostGenesisBeforeLaunch(GetParams(), pindex->nHeight, NodeClock::now())) {
+        return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "brisvia-before-launch",
+                             "post-genesis block body received before Brisvia mainnet launch");
+    }
 
     // Check all requested blocks that we do not already have for validity and
     // save them to disk. Skip processing of unrequested blocks as an anti-DoS
