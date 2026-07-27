@@ -10,10 +10,13 @@
 // The test vector is a real block-1 HEADER mined on the Brisvia mainnet genesis (aa6bc268), with
 // nTime = T0+1, valid RandomX proof of work and the ASERT nBits expected at height 1. Reusing a
 // pre-mined header keeps the test fast (no mining) while exercising the full acceptance path.
+#include <chain.h>
 #include <chainparams.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <node/blockstorage.h>
 #include <primitives/block.h>
+#include <sync.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
 #include <util/chaintype.h>
@@ -21,6 +24,8 @@
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <memory>
 
 namespace {
 // Brisvia mainnet launch time == the genesis timestamp (chainparams: genesisTime).
@@ -33,6 +38,18 @@ const std::string BRISVIA_BLOCK1_HEADER_HEX{
     "00000020f7baf70a8928f8087cd3083d0395e3487e7bca3ae39ae3f2f4a99a3368c26baa"
     "2f19453b15117441b46c59038fa79fac3c2052b5cd299613f6abc4e01bf58fc0f1096e6a"
     "ffff0f1e265d0200"};
+
+// The SAME block, full serialization (header + coinbase body). Used to exercise the block-body
+// barrier in AcceptBlock on an already-known header.
+const std::string BRISVIA_BLOCK1_FULL_HEX{
+    "00000020f7baf70a8928f8087cd3083d0395e3487e7bca3ae39ae3f2f4a99a3368c26baa"
+    "2f19453b15117441b46c59038fa79fac3c2052b5cd299613f6abc4e01bf58fc0f1096e6a"
+    "ffff0f1e265d020001020000000001010000000000000000000000000000000000000000"
+    "000000000000000000000000ffffffff1451080100000000000000092f42726973766961"
+    "2fffffffff0200f2052a0100000016001449272552f2692215d5981c6ac8161130f92c6d"
+    "e50000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689"
+    "799962b48bebd836974e8cf9012000000000000000000000000000000000000000000000"
+    "0000000000000000000000000000"};
 
 struct BrisviaLaunchSetup : public TestingSetup {
     BrisviaLaunchSetup() : TestingSetup{ChainType::BRISVIA_MAIN} {}
@@ -71,6 +88,61 @@ BOOST_AUTO_TEST_CASE(header_rejected_before_T0_and_accepted_at_T0)
         BOOST_CHECK_MESSAGE(ok, "same header must be accepted at T0: " + state.ToString());
         BOOST_REQUIRE(pindex != nullptr);
         BOOST_CHECK_EQUAL(pindex->nHeight, 1);
+    }
+
+    SetMockTime(0);
+}
+
+// The block-BODY barrier in AcceptBlock. This is the case a build without the barrier could have
+// created: the HEADER is already known in the block index, so AcceptBlockHeader returns it WITHOUT
+// re-running ContextualCheckBlockHeader. The body must still be rejected before T0 -- temporarily,
+// never permanently -- and the SAME body must be accepted at T0 on the SAME CBlockIndex.
+BOOST_AUTO_TEST_CASE(body_barrier_rejects_before_T0_on_a_known_header_then_accepts_at_T0)
+{
+    CBlock block;
+    BOOST_REQUIRE(DecodeHexBlk(block, BRISVIA_BLOCK1_FULL_HEX));
+    BOOST_REQUIRE(block.hashPrevBlock == Params().GenesisBlock().GetHash());
+    const uint256 block_hash{block.GetHash()};
+    auto& chainman{*Assert(m_node.chainman)};
+
+    // Step 1 (T0): accept ONLY the header, so it becomes a known CBlockIndex at height 1 with no body
+    // and no failure bit -- exactly the "header known, body missing" state.
+    SetMockTime(BRISVIA_T0);
+    {
+        BlockValidationState state;
+        const CBlockIndex* pindex{nullptr};
+        BOOST_REQUIRE(chainman.ProcessNewBlockHeaders({{block.GetBlockHeader()}}, /*min_pow_checked=*/true, state, &pindex));
+        BOOST_REQUIRE(pindex != nullptr);
+        BOOST_CHECK_EQUAL(pindex->nHeight, 1);
+        BOOST_CHECK(!(pindex->nStatus & BLOCK_HAVE_DATA));
+        BOOST_CHECK(!(pindex->nStatus & BLOCK_FAILED_MASK));
+    }
+
+    // Step 2 (T0-1): send the full BODY. The body barrier in AcceptBlock must reject it temporarily.
+    SetMockTime(BRISVIA_T0 - 1);
+    {
+        bool new_block{false};
+        const bool ok{chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+        BOOST_CHECK_MESSAGE(!ok, "the body must be rejected before T0 even though the header is known");
+        const CBlockIndex* pindex{WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block_hash))};
+        BOOST_REQUIRE(pindex != nullptr);
+        BOOST_CHECK(!(pindex->nStatus & BLOCK_HAVE_DATA));   // the body was NOT stored
+        BOOST_CHECK(!(pindex->nStatus & BLOCK_FAILED_MASK)); // NOT permanently invalidated
+        BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainman.ActiveChain().Height()), 0);
+    }
+
+    // Step 3 (T0): send the SAME body on the SAME index -> accepted, connected, data stored, not failed.
+    SetMockTime(BRISVIA_T0);
+    {
+        bool new_block{false};
+        const bool ok{chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+        BOOST_CHECK_MESSAGE(ok, "the same body must be accepted at T0");
+        BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainman.ActiveChain().Height()), 1);
+        const CBlockIndex* pindex{WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block_hash))};
+        BOOST_REQUIRE(pindex != nullptr);
+        BOOST_CHECK(pindex->nStatus & BLOCK_HAVE_DATA);
+        BOOST_CHECK(!(pindex->nStatus & BLOCK_FAILED_MASK));
+        BOOST_CHECK(WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip()->GetBlockHash()) == block_hash);
     }
 
     SetMockTime(0);
