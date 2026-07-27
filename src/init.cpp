@@ -1861,6 +1861,31 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     int chain_active_height = WITH_LOCK(cs_main, return chainman.ActiveChain().Height());
 
+    // Brisvia fair-launch startup guard (mainnet only): do not continue startup with
+    // an active post-genesis chain while the local node clock is still before T0. A
+    // build without the fair-launch acceptance barrier may have persisted such a chain
+    // (the barrier only guards NEW headers, it does not re-validate the chain on load).
+    // The same condition can also be caused by an incorrect or significantly delayed
+    // system clock, so no block is marked invalid and no chain data is modified
+    // automatically: the node simply refuses to start until the clock is right or the
+    // chain is rebuilt. After T0 the condition is false and this guard does nothing.
+    {
+        const auto now{NodeClock::now()};
+        const NodeSeconds brisvia_launch_time{std::chrono::seconds{chainparams.GenesisBlock().nTime}};
+        if (chainparams.GetChainType() == ChainType::BRISVIA_MAIN &&
+            chain_active_height > 0 &&
+            now < brisvia_launch_time) {
+            return InitError(Untranslated(
+                "Brisvia mainnet cannot start with an active post-genesis chain while the "
+                "system clock is before the configured launch time. Check and synchronize "
+                "the system clock first. If the clock is correct, the chain data may have "
+                "been created by a pre-launch build without the fair-launch barrier: restart "
+                "with a full -reindex (not -reindex-chainstate) and verify that the active "
+                "height returns to 0, or use a clean chain datadir. Wallet data is not "
+                "modified by this check."));
+        }
+    }
+
     // On first startup, warn on low block storage space
     if (!do_reindex && !do_reindex_chainstate && chain_active_height <= 1) {
         uint64_t assumed_chain_bytes{chainparams.AssumedBlockchainSize() * 1024 * 1024 * 1024};
