@@ -15,6 +15,7 @@ add_executable(test_bitcoin
   brisvia_randomx_tests.cpp
   brisvia_headerssync_tests.cpp
   brisvia_consensus_guards_tests.cpp
+  brisvia_launch_barrier_tests.cpp
   base32_tests.cpp
   base58_tests.cpp
   base64_tests.cpp
