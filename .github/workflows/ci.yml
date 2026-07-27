@@ -100,7 +100,7 @@ jobs:
       - name: Run Brisvia unit tests
         run: |
           ctest --test-dir build --output-on-failure \
-            -R '^(brisvia_randomx_tests|brisvia_headerssync_tests|brisvia_consensus_guards_tests)$'
+            -R '^(brisvia_randomx_tests|brisvia_headerssync_tests|brisvia_consensus_guards_tests|brisvia_launch_barrier_tests)$'
 
       - name: Show ccache statistics
         if: always()
