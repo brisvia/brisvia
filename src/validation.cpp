@@ -4253,6 +4253,27 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
 
+    const auto now{NodeClock::now()};
+    const CChainParams& chain_params{chainman.GetParams()};
+    const NodeSeconds brisvia_launch_time{std::chrono::seconds{chain_params.GenesisBlock().nTime}};
+
+    // Brisvia fair-launch acceptance barrier (mainnet only): reject every
+    // post-genesis block while the local node clock is still before T0 (== the
+    // genesis timestamp). The normal future-time allowance (MAX_FUTURE_BLOCK_TIME,
+    // 2h) would otherwise let block 1 -- whose minimum valid timestamp is forced
+    // by MTP to be T0+1 -- be accepted up to ~2h before T0, letting a modified
+    // miner front-run the fair launch. This is a temporary, clock-based rejection
+    // (BLOCK_TIME_FUTURE, NOT a permanent invalidity): the same block becomes
+    // acceptable when re-presented at or after T0. It prevents pre-launch
+    // ACCEPTANCE by updated honest nodes; it cannot prove when the RandomX work
+    // was computed, so it does not by itself prevent private pre-computation.
+    if (chain_params.GetChainType() == ChainType::BRISVIA_MAIN &&
+        nHeight >= 1 &&
+        now < brisvia_launch_time) {
+        return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "brisvia-before-launch",
+                             "post-genesis block received before Brisvia mainnet launch");
+    }
+
     // Testnet4 and regtest only: Check timestamp against prev for difficulty-adjustment
     // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
     if (consensusParams.enforce_BIP94) {
@@ -4266,7 +4287,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     }
 
     // Check timestamp
-    if (block.Time() > NodeClock::now() + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
+    if (block.Time() > now + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
     }
 

@@ -792,6 +792,21 @@ static RPCHelpMan getblocktemplate()
         if (miner.isInitialBlockDownload()) {
             throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, CLIENT_NAME " is in initial sync and waiting for blocks...");
         }
+
+        // Brisvia fair-launch defense-in-depth: refuse to hand out a mining
+        // template on Brisvia mainnet before the launch time T0 (== the genesis
+        // timestamp). The consensus barrier in ContextualCheckBlockHeader already
+        // refuses to ACCEPT a pre-T0 block; this makes the official node/pool/worker
+        // refuse to even build one early, so an app bug, a stale pool job or a
+        // direct RPC call cannot accidentally start mining before T0. It is honest-
+        // node hygiene, not a security boundary (all template data is public, so a
+        // modified miner can build its own template regardless). The retry-friendly
+        // IN_INITIAL_DOWNLOAD code makes existing pool/worker back-off logic simply
+        // keep retrying until T0.
+        if (chainman.GetParams().GetChainType() == ChainType::BRISVIA_MAIN &&
+            NodeClock::now() < NodeSeconds{std::chrono::seconds{chainman.GetParams().GenesisBlock().nTime}}) {
+            throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Brisvia mainnet mining has not started yet");
+        }
     }
 
     static unsigned int nTransactionsUpdatedLast;
