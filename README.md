@@ -80,12 +80,15 @@ Brisvia runs its own networks. To join the main network (real coins):
 
     build/bin/bitcoind -chain=brisvia
 
-To join the shared test network instead:
+To use the test network instead:
 
     build/bin/bitcoind -chain=brisvia-test
 
-The node discovers peers automatically (DNS seed + fixed seeds) and validates the RandomX Proof-of-Work of
-every block as it syncs.
+The node discovers peers automatically through the fixed seed nodes shipped in the daemon (DNS seeds are
+not available yet) and validates the RandomX Proof-of-Work of every block as it syncs.
+
+For a step-by-step guide, see the Run a node guide at https://brisvia.com/run-a-node/ (for anyone) or
+[doc/run-a-node.md](doc/run-a-node.md) (for operators). Full network parameters: https://brisvia.com/integration/.
 
 The port is additive and gated: without Brisvia's consensus parameters, behaviour is identical to upstream
 Bitcoin Core. Brisvia's own code lives in `src/consensus/brisvia_*`, `src/consensus/randomx_seed.h` and
